@@ -20,7 +20,7 @@ from agri_toolkit.downloaders.field_boundaries import FieldBoundaryDownloader
 
 class TestFieldBoundaryDownloader:
     """Test suite for FieldBoundaryDownloader.
-    
+
     Note: These tests make real HTTP requests to Source Cooperative.
     Download counts are kept minimal (2-10 fields) to:
     - Reduce CI/CD execution time
@@ -41,7 +41,7 @@ class TestFieldBoundaryDownloader:
 
     def test_download_minimum_fields(self, downloader):
         """Test downloading minimum number of fields from real data.
-        
+
         Downloads only 2 fields to minimize external API load during testing.
         """
         fields = downloader.download(count=2, regions=["corn_belt"])
@@ -83,18 +83,14 @@ class TestFieldBoundaryDownloader:
             assert col in fields.columns, f"Missing required column: {col}"
 
         # Verify data types
-        assert fields["area_acres"].dtype in ["float64", "float32"], (
-            "area_acres should be numeric"
-        )
+        assert fields["area_acres"].dtype in ["float64", "float32"], "area_acres should be numeric"
 
     def test_download_has_crs(self, downloader):
         """Test that GeoDataFrame has correct coordinate reference system."""
         fields = downloader.download(count=2, regions=["corn_belt"])
 
         assert fields.crs is not None, "GeoDataFrame missing CRS"
-        assert fields.crs.to_string() == "EPSG:4326", (
-            "CRS should be WGS84 (EPSG:4326)"
-        )
+        assert fields.crs.to_string() == "EPSG:4326", "CRS should be WGS84 (EPSG:4326)"
 
     def test_download_multiple_regions(self, downloader):
         """Test downloading from multiple regions."""
@@ -110,9 +106,7 @@ class TestFieldBoundaryDownloader:
 
     def test_download_filters_by_crop(self, downloader):
         """Test crop type filtering works correctly."""
-        fields = downloader.download(
-            count=2, regions=["corn_belt"], crops=["corn", "soybeans"]
-        )
+        fields = downloader.download(count=2, regions=["corn_belt"], crops=["corn", "soybeans"])
 
         # All fields should have crop_2023 in requested types
         assert all(
@@ -177,9 +171,7 @@ class TestFieldBoundaryDownloader:
             {
                 "field_id": ["TEST_001"],
                 # Missing 'region' column
-                "geometry": [
-                    Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)])
-                ],
+                "geometry": [Polygon([(0, 0), (1, 0), (1, 1), (0, 1), (0, 0)])],
             },
             crs="EPSG:4326",
         )
@@ -216,13 +208,11 @@ class TestFieldBoundaryDownloader:
 
     def test_download_real_data_structure(self, downloader):
         """Integration test: Verify complete data structure from Source Cooperative.
-        
+
         This test validates that we're getting properly structured real data
         from the USDA Crop Sequence Boundaries dataset.
         """
-        fields = downloader.download(
-            count=5, regions=["corn_belt"], crops=["corn", "soybeans"]
-        )
+        fields = downloader.download(count=5, regions=["corn_belt"], crops=["corn", "soybeans"])
 
         # Should get exactly 5 fields
         assert len(fields) == 5
