@@ -1,8 +1,7 @@
 """Configuration management for agri-data-toolkit."""
 
-import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import yaml
 
@@ -45,9 +44,7 @@ class Config:
     def load(self) -> None:
         """Load configuration from YAML file."""
         if not self.config_path.exists():
-            raise FileNotFoundError(
-                f"Configuration file not found: {self.config_path}"
-            )
+            raise FileNotFoundError(f"Configuration file not found: {self.config_path}")
 
         with open(self.config_path, "r") as f:
             self._config = yaml.safe_load(f)
