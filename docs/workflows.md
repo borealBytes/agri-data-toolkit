@@ -16,13 +16,15 @@ Code Push (AI Agent or Human)
    ├─ Lint (Black, isort, flake8, mypy)
    ├─ Test (pytest with coverage)
    └─ Build (poetry build)
+        ├─ With 'generate-build-artifact' label → Save artifacts
+        └─ Without label → Skip artifacts (saves storage)
 ```
 
 ## Workflows
 
 ### 1. Auto-Format Workflow (`.github/workflows/auto-format.yml`)
 
-**Trigger:** Every push to any branch, every PR
+**Trigger:** Every push to any branch
 
 **Purpose:** Automatically format code to project standards
 
@@ -65,10 +67,61 @@ Code Push (AI Agent or Human)
 
 #### Job 3: Build (runs after test)
 - Build package with Poetry
-- Store artifacts
+- **Conditionally** store artifacts (see labels below)
 - **Fast:** ~1 minute
 
 **Total Time:** ~5-8 minutes for full pipeline
+
+## Labels
+
+### `preview-ready`
+
+Add this label to PRs to trigger full CI/CD pipeline:
+
+```bash
+# Via GitHub UI: Add label "preview-ready" to PR
+# Via GitHub CLI:
+gh pr edit <PR_NUMBER> --add-label "preview-ready"
+```
+
+Without this label:
+- Auto-format still runs
+- CI/CD waits for label
+
+### `generate-build-artifact` (New!)
+
+**Purpose:** Control whether build artifacts are stored
+
+**Why:** Saves GitHub storage costs by not storing artifacts you'll never use
+
+**Behavior:**
+- ✅ **With label:** Build artifacts uploaded to GitHub (7 day retention)
+- ⏭️ **Without label:** Build runs successfully but artifacts NOT stored
+
+**When to use:**
+```bash
+# Add this label when you need the .whl and .tar.gz files
+gh pr edit <PR_NUMBER> --add-label "generate-build-artifact"
+
+# Examples:
+# - Testing pip installation from built package
+# - Preparing for release
+# - Sharing package with collaborators
+# - Debugging build issues
+```
+
+**When to skip:**
+- Regular development PRs (default)
+- Just running tests
+- Code review PRs
+- Most daily work
+
+**Cost savings:**
+- Typical PR: No artifacts = $0 storage
+- With artifacts: ~5-10MB stored for 7 days
+- Over dozens of PRs: Significant savings!
+
+**Note:** Build ALWAYS runs (to verify it works), but artifacts only stored when labeled.
 
 ## For AI Agents
 
@@ -81,6 +134,7 @@ Code Push (AI Agent or Human)
 # Auto-format runs automatically
 # CI/CD runs automatically
 # All checks pass ✓
+# No artifacts stored (unless labeled)
 ```
 
 ### No Action Required!
@@ -92,6 +146,7 @@ Just push your code. The workflows handle everything:
 - ✅ Type checking
 - ✅ Testing
 - ✅ Building
+- 💰 Artifacts only when needed (saves costs)
 
 ## For Local Development
 
@@ -135,13 +190,19 @@ git push
 ### ✅ Success Path
 
 ```
-Push → Auto-format (no changes) → CI/CD → All pass ✓
+Push → Auto-format (no changes) → CI/CD → All pass ✓ → No artifacts stored
 ```
 
 ### 🔧 Auto-Fix Path
 
 ```
 Push → Auto-format (changes made) → Auto-commit → CI/CD → All pass ✓
+```
+
+### 📦 With Artifacts
+
+```
+Push → Add 'generate-build-artifact' label → CI/CD → Build artifacts stored
 ```
 
 ### ❌ Failure Path
@@ -151,22 +212,6 @@ Push → Auto-format → CI/CD → Tests fail ✗
 ```
 
 **Note:** Auto-format only fixes formatting, not logic errors or test failures.
-
-## Labels
-
-### `preview-ready`
-
-Add this label to PRs to trigger full CI/CD pipeline:
-
-```bash
-# Via GitHub UI: Add label "preview-ready" to PR
-# Via GitHub CLI:
-gh pr edit <PR_NUMBER> --add-label "preview-ready"
-```
-
-Without this label:
-- Auto-format still runs
-- CI/CD waits for label
 
 ## Performance
 
@@ -181,6 +226,11 @@ Without this label:
 - **Build:** ~1 minute
 - **Total:** ~5-8 minutes
 - **Cost:** Moderate (only on labeled PRs/main)
+
+### Artifact Storage
+- **With label:** ~5-10MB per PR (7 day retention)
+- **Without label:** $0 storage cost
+- **Savings:** Significant over dozens of PRs
 
 ## Troubleshooting
 
@@ -199,6 +249,13 @@ Check:
 3. Did auto-format complete?
 4. Check Actions tab on GitHub
 
+### Build artifacts not appearing?
+
+Check:
+1. Does PR have `generate-build-artifact` label?
+2. Did build job complete successfully?
+3. Check "Artifacts" section at bottom of workflow run
+
 ### Infinite loop?
 
 Should never happen due to `[skip ci]` in commit message.
@@ -213,6 +270,7 @@ If it does:
 1. **Install pre-commit hooks locally** (fastest feedback)
 2. **Let auto-format handle remote commits** (AI agents)
 3. **Add `preview-ready` label before review** (runs full CI)
+4. **Only add `generate-build-artifact` when needed** (saves costs)
 
 ### For Contributors
 
@@ -223,6 +281,7 @@ If it does:
 5. **Push and create PR**
 6. **Auto-format runs remotely** (backup)
 7. **Add `preview-ready` when ready**
+8. **Add `generate-build-artifact` only if you need the build files**
 
 ## Configuration Files
 
