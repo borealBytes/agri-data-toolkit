@@ -60,9 +60,9 @@ class TestFieldBoundaryDownloader:
         fields = downloader.download(count=10, regions=["corn_belt"])
 
         assert fields.crs is not None, "GeoDataFrame missing CRS"
-        assert (
-            fields.crs.to_string() == "EPSG:4326"
-        ), "CRS should be WGS84 (EPSG:4326)"
+        assert fields.crs.to_string() == "EPSG:4326", (
+            "CRS should be WGS84 (EPSG:4326)"
+        )
 
     def test_download_multiple_regions(self, downloader):
         """Test downloading from multiple regions."""
@@ -73,7 +73,9 @@ class TestFieldBoundaryDownloader:
 
         # Should have fields from all specified regions
         unique_regions = set(fields["region"].unique())
-        assert len(unique_regions) >= 1, "Should have at least 1 region represented"
+        assert len(unique_regions) >= 1, (
+            "Should have at least 1 region represented"
+        )
 
     def test_download_saves_to_file(self, downloader, tmp_path):
         """Test that download saves fields to file."""
