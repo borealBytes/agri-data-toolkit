@@ -85,9 +85,7 @@ class FieldBoundaryDownloader(BaseDownloader):
 
         return fields_gdf
 
-    def _generate_sample_fields(
-        self, count: int, regions: List[str]
-    ) -> gpd.GeoDataFrame:
+    def _generate_sample_fields(self, count: int, regions: List[str]) -> gpd.GeoDataFrame:
         """Generate sample field boundaries for testing.
 
         PLACEHOLDER: This will be replaced with actual data source integration.
@@ -150,9 +148,7 @@ class FieldBoundaryDownloader(BaseDownloader):
                         "area_acres": 80 + (j % 80),  # Vary between 80-160 acres
                         "centroid_lat": lat + 0.005,
                         "centroid_lon": lon + 0.005,
-                        "crop_type": ["corn", "soybeans", "wheat", "cotton"][
-                            j % 4
-                        ],
+                        "crop_type": ["corn", "soybeans", "wheat", "cotton"][j % 4],
                         "geometry": polygon,
                     }
                 )
@@ -200,9 +196,7 @@ class FieldBoundaryDownloader(BaseDownloader):
 
         # Check for required columns
         required_columns = ["field_id", "region", "geometry"]
-        missing_columns = [
-            col for col in required_columns if col not in data.columns
-        ]
+        missing_columns = [col for col in required_columns if col not in data.columns]
 
         if missing_columns:
             self.logger.error(f"Missing required columns: {missing_columns}")
