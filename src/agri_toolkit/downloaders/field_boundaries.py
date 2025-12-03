@@ -41,7 +41,7 @@ class FieldBoundaryDownloader(BaseDownloader):
 
     This downloader accesses USDA NASS Crop Sequence Boundaries (CSB) data
     hosted on Source Cooperative in cloud-optimized GeoParquet format.
-    
+
     The CSB dataset provides algorithmically-delineated field boundaries
     derived from 8 years of Cropland Data Layer (CDL) historical data.
     Each boundary represents a continuous crop sequence area.
@@ -53,7 +53,7 @@ class FieldBoundaryDownloader(BaseDownloader):
 
     Crops:
         Corn, soybeans, wheat, cotton, and other row crops
-        
+
     Data Access:
         Uses DuckDB with spatial extension for efficient cloud-native
         GeoParquet querying. Only downloads filtered subset of fields,
@@ -90,7 +90,7 @@ class FieldBoundaryDownloader(BaseDownloader):
 
     def _get_duckdb_connection(self) -> duckdb.DuckDBPyConnection:
         """Get or create DuckDB connection with spatial extension.
-        
+
         Returns:
             DuckDB connection with spatial and httpfs extensions loaded.
         """
@@ -195,8 +195,7 @@ class FieldBoundaryDownloader(BaseDownloader):
         invalid_crops = [c for c in crops if c not in self.CROP_TYPES]
         if invalid_crops:
             raise ValueError(
-                f"Invalid crops: {invalid_crops}. "
-                f"Valid options: {list(self.CROP_TYPES.keys())}"
+                f"Invalid crops: {invalid_crops}. " f"Valid options: {list(self.CROP_TYPES.keys())}"
             )
 
         self.logger.info(f"Regions: {regions}")
@@ -231,7 +230,7 @@ class FieldBoundaryDownloader(BaseDownloader):
         max_acres: float,
     ) -> gpd.GeoDataFrame:
         """Query USDA CSB data from Source Cooperative using DuckDB.
-        
+
         Uses DuckDB spatial extension to efficiently query cloud-hosted
         GeoParquet files with server-side filtering. Only downloads
         the filtered subset, not the entire dataset.
@@ -245,7 +244,7 @@ class FieldBoundaryDownloader(BaseDownloader):
 
         Returns:
             GeoDataFrame with downloaded field boundaries.
-            
+
         Raises:
             RuntimeError: If query fails or no data returned.
         """
@@ -341,7 +340,7 @@ class FieldBoundaryDownloader(BaseDownloader):
 
         Returns:
             Path to saved file.
-            
+
         Raises:
             ValueError: If output format is unsupported.
         """
@@ -353,8 +352,7 @@ class FieldBoundaryDownloader(BaseDownloader):
             gdf.to_file(output_path, driver="ESRI Shapefile")
         else:
             raise ValueError(
-                f"Unsupported output format: {output_format}. "
-                f"Use 'geojson' or 'shapefile'."
+                f"Unsupported output format: {output_format}. " f"Use 'geojson' or 'shapefile'."
             )
 
         self.logger.info(f"Saved {len(gdf)} fields to {output_path}")
@@ -362,7 +360,7 @@ class FieldBoundaryDownloader(BaseDownloader):
 
     def validate(self, data: gpd.GeoDataFrame) -> bool:
         """Validate field boundary data.
-        
+
         Checks for:
         - Non-empty dataset
         - Required columns present
