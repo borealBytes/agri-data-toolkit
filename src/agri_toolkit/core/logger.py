@@ -2,7 +2,7 @@
 
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from loguru import logger
 
@@ -50,7 +50,7 @@ def setup_logger(
         )
 
 
-def get_logger():
+def get_logger() -> Any:
     """Get the configured logger instance.
 
     Returns:
