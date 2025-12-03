@@ -7,8 +7,55 @@ on:
     branches: [ main ]
 
 jobs:
+  # Job 1: Lint first (fastest, cheapest)
+  lint:
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview-ready'))
+    
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+    
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v4
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-3.13-${{ hashFiles('**/poetry.lock') }}
+    
+    - name: Install dependencies
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      run: poetry install --no-interaction --with dev
+    
+    - name: Run code formatting checks
+      run: |
+        poetry run black --check src/ tests/
+        poetry run isort --check-only src/ tests/
+    
+    - name: Run flake8 linting
+      run: poetry run flake8 src/ tests/
+    
+    - name: Run mypy type checking
+      run: poetry run mypy src/ --ignore-missing-imports
+
+  # Job 2: Test (run after lint passes)
   test:
-    # Only run on PRs with 'preview-ready' label or on main branch
+    needs: lint
     if: |
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview-ready'))
@@ -51,12 +98,6 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y gdal-bin libgdal-dev
     
-    - name: Run code quality checks
-      run: |
-        poetry run black --check src/ tests/
-        poetry run isort --check-only src/ tests/
-        poetry run flake8 src/ tests/
-    
     - name: Run tests with coverage
       run: |
         poetry run pytest tests/ -v --cov=src/agri_toolkit --cov-report=xml --cov-report=term
@@ -69,36 +110,9 @@ jobs:
         name: codecov-umbrella
         fail_ci_if_error: false
 
-  lint:
-    if: |
-      github.event_name == 'push' ||
-      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview-ready'))
-    
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Set up Python 3.13
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.13"
-    
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        version: latest
-    
-    - name: Install dependencies
-      run: poetry install --no-interaction --with dev
-    
-    - name: Run mypy type checking
-      run: poetry run mypy src/ --ignore-missing-imports
-      continue-on-error: true
-
-  # Placeholder for future package build and publish
+  # Job 3: Build (only if lint and test pass)
   build:
+    needs: [lint, test]
     if: |
       github.event_name == 'push' ||
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview-ready'))
