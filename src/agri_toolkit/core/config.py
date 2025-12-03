@@ -1,7 +1,7 @@
 """Configuration management for agri-data-toolkit."""
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 import yaml
 
@@ -47,7 +47,12 @@ class Config:
             raise FileNotFoundError(f"Configuration file not found: {self.config_path}")
 
         with open(self.config_path, "r") as f:
-            self._config = yaml.safe_load(f)
+            loaded_config = yaml.safe_load(f)
+            # Ensure loaded config is a dict
+            if isinstance(loaded_config, dict):
+                self._config = loaded_config
+            else:
+                self._config = {}
 
     def get(self, key: str, default: Any = None) -> Any:
         """Get configuration value by key.
@@ -62,7 +67,7 @@ class Config:
             Configuration value or default.
         """
         keys = key.split(".")
-        value = self._config
+        value: Any = self._config
 
         for k in keys:
             if isinstance(value, dict) and k in value:
@@ -74,15 +79,18 @@ class Config:
 
     def get_field_config(self) -> Dict[str, Any]:
         """Get field boundaries configuration."""
-        return self.get("fields", {})
+        result = self.get("fields", {})
+        return cast(Dict[str, Any], result)
 
     def get_download_config(self) -> Dict[str, Any]:
         """Get download settings."""
-        return self.get("download", {})
+        result = self.get("download", {})
+        return cast(Dict[str, Any], result)
 
     def get_paths(self) -> Dict[str, str]:
         """Get configured paths."""
-        return self.get("paths", {})
+        result = self.get("paths", {})
+        return cast(Dict[str, str], result)
 
     @property
     def data_root(self) -> Path:
