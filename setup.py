@@ -1,5 +1,9 @@
 #!/usr/bin/env python
-"""Setup script for agri-data-toolkit."""
+"""Setup script for agri-data-toolkit.
+
+Note: Poetry is the recommended installation method.
+This setup.py is provided for compatibility with pip-only environments.
+"""
 
 from setuptools import find_packages, setup
 
@@ -32,12 +36,10 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: POSIX :: Linux",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.13",
         "Topic :: Scientific/Engineering :: GIS",
     ],
-    python_requires=">=3.9",
+    python_requires=">=3.13",
     install_requires=requirements,
     entry_points={
         "console_scripts": [
