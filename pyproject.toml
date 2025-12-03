@@ -8,6 +8,7 @@ readme = "README.md"
 homepage = "https://github.com/borealBytes/agri-data-toolkit"
 repository = "https://github.com/borealBytes/agri-data-toolkit"
 keywords = ["agriculture", "geospatial", "precision-agriculture", "satellite-imagery", "crop-analytics"]
+packages = [{include = "agri_toolkit", from = "src"}]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
