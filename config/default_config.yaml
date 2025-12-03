@@ -1,0 +1,151 @@
+# Agricultural Data Toolkit - Default Configuration
+# Copy to user_config.yaml and customize as needed
+
+# Field boundaries configuration
+fields:
+  count: 200
+  regions:
+    - corn_belt
+    - great_plains
+    - southeast
+  crop_types:
+    - corn
+    - soybeans
+    - wheat
+    - cotton
+  size_range:
+    min_acres: 40
+    max_acres: 640
+
+# Temporal configuration
+temporal:
+  year_range:
+    start: 2020
+    end: 2024
+  growing_season:
+    start_month: 6  # June
+    end_month: 9    # September
+
+# Coordinate reference systems
+crs:
+  wgs84: "EPSG:4326"     # WGS84 (GPS coordinates)
+  albers: "EPSG:5070"    # Albers Equal Area Conic (US)
+  processing: "EPSG:5070"  # CRS for spatial operations
+  output: "EPSG:4326"      # CRS for final outputs
+
+# Data directories
+paths:
+  data_root: "data"
+  raw: "data/raw"
+  processed: "data/processed"
+  metadata: "data/metadata"
+  logs: "logs"
+  reports: "reports"
+
+# Download settings
+download:
+  batch_size: 50
+  retry_attempts: 3
+  retry_delay_seconds: 5
+  timeout_seconds: 300
+  parallel_downloads: 4
+
+# SSURGO soil data
+soil:
+  attributes:
+    - om_pct          # Organic matter percentage
+    - ph_water        # pH in water
+    - awc             # Available water capacity
+    - drainage_class  # Drainage classification
+    - texture_class   # Soil texture
+  depth_cm:
+    min: 0
+    max: 30  # Top 30cm (topsoil)
+
+# Weather data (NASA POWER)
+weather:
+  parameters:
+    - T2M_MIN         # Minimum temperature at 2m
+    - T2M_MAX         # Maximum temperature at 2m
+    - PRECTOTCORR     # Precipitation (corrected)
+    - ALLSKY_SFC_SW_DWN  # Solar radiation
+    - RH2M            # Relative humidity at 2m
+    - WS10M           # Wind speed at 10m
+  derived:
+    - gdd             # Growing degree days
+    - chu             # Crop heat units
+
+# NOAA climate data (optional)
+noaa:
+  enabled: false
+  max_station_distance_km: 50
+  interpolation_method: "idw"  # Inverse distance weighting
+
+# Satellite imagery
+imagery:
+  sentinel2:
+    enabled: true
+    bands:
+      - B4   # Red
+      - B8   # NIR
+      - B3   # Green
+      - B11  # SWIR
+    cloud_cover_max: 20
+    resolution_m: 10
+  
+  landsat:
+    enabled: true
+    bands:
+      - B4   # Red
+      - B5   # NIR
+      - B3   # Green
+      - B6   # SWIR1
+    cloud_cover_max: 20
+    resolution_m: 30
+  
+  indices:
+    - ndvi   # Normalized Difference Vegetation Index
+    - evi    # Enhanced Vegetation Index
+    - ndwi   # Normalized Difference Water Index
+
+# USDA Cropland Data Layer
+cropland:
+  enabled: true
+  years:
+    - 2020
+    - 2021
+    - 2022
+    - 2023
+    - 2024
+
+# Optional datasets
+optional:
+  nass_statistics: false
+  ers_economics: false
+  equipment_data: false
+
+# Validation settings
+validation:
+  strict_mode: false
+  auto_fix: true
+  checks:
+    - completeness
+    - spatial_validity
+    - temporal_coverage
+    - value_ranges
+    - crs_consistency
+
+# Export settings
+export:
+  formats:
+    - geojson
+    - csv
+  include_metadata: true
+  compress: false
+
+# Logging configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/agri_toolkit.log"
+  console: true
