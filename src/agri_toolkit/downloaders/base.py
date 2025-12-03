@@ -17,7 +17,7 @@ class BaseDownloader(ABC):
     implement the download() method.
     """
 
-    def __init__(self, config: Optional[Config] = None):
+    def __init__(self, config: Optional[Config] = None) -> None:
         """Initialize the downloader.
 
         Args:
@@ -33,7 +33,7 @@ class BaseDownloader(ABC):
         self.config.processed_data_path.mkdir(parents=True, exist_ok=True)
 
     @abstractmethod
-    def download(self, **kwargs) -> Any:
+    def download(self, **kwargs: Any) -> Any:
         """Download data from the source.
 
         This method must be implemented by all subclasses.
