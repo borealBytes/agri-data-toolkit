@@ -66,9 +66,7 @@ class FieldBoundaryDownloader(BaseDownloader):
             raise ValueError("count must be at least 1")
 
         if regions is None:
-            regions = self.config.get(
-                "fields.regions", ["corn_belt", "great_plains", "southeast"]
-            )
+            regions = self.config.get("fields.regions", ["corn_belt", "great_plains", "southeast"])
 
         if not regions:
             raise ValueError("regions cannot be empty")
