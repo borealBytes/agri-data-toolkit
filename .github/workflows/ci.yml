@@ -150,12 +150,25 @@ jobs:
     - name: Build package
       run: poetry build
     
+    # Only upload artifacts if 'generate-build-artifact' label is present
     - name: Store build artifacts
+      if: |
+        github.event_name == 'pull_request' && 
+        contains(github.event.pull_request.labels.*.name, 'generate-build-artifact')
       uses: actions/upload-artifact@v4
       with:
         name: dist-packages
         path: dist/
         retention-days: 7
+    
+    - name: Skip artifact upload (no label)
+      if: |
+        github.event_name == 'pull_request' && 
+        !contains(github.event.pull_request.labels.*.name, 'generate-build-artifact')
+      run: |
+        echo "ℹ️  Skipping artifact upload - 'generate-build-artifact' label not present"
+        echo "Build succeeded but artifacts not stored (saves storage costs)"
+        echo "To store artifacts, add the 'generate-build-artifact' label to this PR"
     
     # Placeholder for PyPI publish (disabled for now)
     # - name: Publish to PyPI
