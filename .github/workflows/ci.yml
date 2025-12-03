@@ -1,0 +1,135 @@
+name: CI/CD Pipeline
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+jobs:
+  test:
+    # Only run on PRs with 'preview-ready' label or on main branch
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview-ready'))
+    
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        python-version: ["3.13"]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+    
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v4
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+    
+    - name: Install dependencies
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      run: poetry install --no-interaction --with dev
+    
+    - name: Install GDAL system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gdal-bin libgdal-dev
+    
+    - name: Run code quality checks
+      run: |
+        poetry run black --check src/ tests/
+        poetry run isort --check-only src/ tests/
+        poetry run flake8 src/ tests/
+    
+    - name: Run tests with coverage
+      run: |
+        poetry run pytest tests/ -v --cov=src/agri_toolkit --cov-report=xml --cov-report=term
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  lint:
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview-ready'))
+    
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+    
+    - name: Install dependencies
+      run: poetry install --no-interaction --with dev
+    
+    - name: Run mypy type checking
+      run: poetry run mypy src/ --ignore-missing-imports
+      continue-on-error: true
+
+  # Placeholder for future package build and publish
+  build:
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview-ready'))
+    
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.13"
+    
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+    
+    - name: Build package
+      run: poetry build
+    
+    - name: Store build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: dist-packages
+        path: dist/
+        retention-days: 7
+    
+    # Placeholder for PyPI publish (disabled for now)
+    # - name: Publish to PyPI
+    #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    #   env:
+    #     POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_TOKEN }}
+    #   run: poetry publish --no-interaction

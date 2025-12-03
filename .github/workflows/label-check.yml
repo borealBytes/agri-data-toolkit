@@ -1,0 +1,16 @@
+name: Label Check
+
+# Remind to add preview-ready label
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-label:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check for preview-ready label
+      if: "!contains(github.event.pull_request.labels.*.name, 'preview-ready')"
+      run: |
+        echo "::notice::This PR does not have the 'preview-ready' label. CI/CD will not run until the label is added."
+        echo "To run CI/CD tests, add the 'preview-ready' label to this PR."
