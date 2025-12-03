@@ -1,7 +1,5 @@
 """Tests for field boundary downloader."""
 
-from pathlib import Path
-
 import geopandas as gpd
 import pytest
 from shapely.geometry import Polygon
@@ -75,7 +73,7 @@ class TestFieldBoundaryDownloader:
 
     def test_download_saves_to_file(self, downloader, tmp_path):
         """Test that download saves fields to file."""
-        fields = downloader.download(count=10, regions=["corn_belt"], output_format="geojson")
+        downloader.download(count=10, regions=["corn_belt"], output_format="geojson")
 
         # Check that file was created
         expected_path = tmp_path / "raw" / "field_boundaries" / "fields.geojson"
