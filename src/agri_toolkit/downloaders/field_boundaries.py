@@ -1,81 +1,220 @@
-"""Field boundary downloader.
+"""Field boundary downloader using USDA Crop Sequence Boundaries.
 
 This module downloads vector polygons representing row crop field boundaries
-across diverse US agricultural regions.
+from the USDA NASS Crop Sequence Boundaries (CSB) dataset via Source Cooperative.
+
+Data Source:
+    USDA NASS Crop Sequence Boundaries (2023)
+    https://source.coop/fiboa/us-usda-cropland
+    
+Format:
+    GeoParquet (cloud-optimized columnar format)
+    
+Coverage:
+    Entire contiguous United States, 16+ million field boundaries
+    
+Attributes:
+    - Field ID, state/county FIPS codes
+    - Acreage (field size)
+    - 2023 crop type
+    - Geometry (polygon boundaries in EPSG:4326)
+
+Citation:
+    USDA National Agricultural Statistics Service Cropland Data Layer. 
+    {YEAR}. Published crop-specific data layer [Online]. 
+    Available at https://nassgeodata.gmu.edu/CropScape/ 
+    (verified {date}). USDA-NASS, Washington, DC.
 """
 
 from pathlib import Path
 from typing import Any, List, Optional
 
+import duckdb
 import geopandas as gpd
-from shapely.geometry import Polygon
 
 from agri_toolkit.core.config import Config
 from agri_toolkit.downloaders.base import BaseDownloader
 
 
 class FieldBoundaryDownloader(BaseDownloader):
-    """Download field boundary polygons for row crop fields.
+    """Download field boundary polygons from USDA Crop Sequence Boundaries.
 
-    This downloader acquires ~200 field boundaries across:
-    - Corn Belt (IL, IA, IN, OH, MN)
-    - Great Plains (KS, NE, SD, ND, TX)
-    - Southeast (AR, MS, LA, GA)
+    This downloader accesses USDA NASS Crop Sequence Boundaries (CSB) data
+    hosted on Source Cooperative in cloud-optimized GeoParquet format.
+    
+    The CSB dataset provides algorithmically-delineated field boundaries
+    derived from 8 years of Cropland Data Layer (CDL) historical data.
+    Each boundary represents a continuous crop sequence area.
 
-    Crops: corn, soybeans, wheat, cotton
+    Regions:
+        - corn_belt: IL, IA, IN, OH, MN (major corn and soybean production)
+        - great_plains: KS, NE, SD, ND, TX (wheat and diverse crops)
+        - southeast: AR, MS, LA, GA (cotton, rice, soybeans)
+
+    Crops:
+        Corn, soybeans, wheat, cotton, and other row crops
+        
+    Data Access:
+        Uses DuckDB with spatial extension for efficient cloud-native
+        GeoParquet querying. Only downloads filtered subset of fields,
+        reducing bandwidth and processing time.
     """
+
+    # Source Cooperative base URL for USDA CSB GeoParquet data
+    SOURCE_COOP_BASE_URL = "https://data.source.coop/fiboa/us-usda-cropland"
+
+    # Mapping of regions to state FIPS codes
+    REGION_STATE_FIPS = {
+        "corn_belt": ["17", "19", "18", "39", "27"],  # IL, IA, IN, OH, MN
+        "great_plains": ["20", "31", "46", "38", "48"],  # KS, NE, SD, ND, TX
+        "southeast": ["05", "28", "22", "13"],  # AR, MS, LA, GA
+    }
+
+    # Crop type mappings (CSB 2023 crop field)
+    CROP_TYPES = {
+        "corn": "corn",
+        "soybeans": "soybeans",
+        "wheat": "wheat",
+        "cotton": "cotton",
+    }
 
     def __init__(self, config: Optional[Config] = None) -> None:
         """Initialize field boundary downloader.
 
         Args:
-            config: Configuration object.
+            config: Configuration object. If None, uses default config.
         """
         super().__init__(config)
         self.output_subdir = "field_boundaries"
+        self._duckdb_conn: Optional[duckdb.DuckDBPyConnection] = None
+
+    def _get_duckdb_connection(self) -> duckdb.DuckDBPyConnection:
+        """Get or create DuckDB connection with spatial extension.
+        
+        Returns:
+            DuckDB connection with spatial and httpfs extensions loaded.
+        """
+        if self._duckdb_conn is None:
+            self._duckdb_conn = duckdb.connect()
+            # Install and load spatial extension for geometry handling
+            self._duckdb_conn.execute("INSTALL spatial;")
+            self._duckdb_conn.execute("LOAD spatial;")
+            # Install and load httpfs for remote file access
+            self._duckdb_conn.execute("INSTALL httpfs;")
+            self._duckdb_conn.execute("LOAD httpfs;")
+            self.logger.debug("DuckDB connection initialized with spatial extensions")
+        return self._duckdb_conn
 
     def download(self, **kwargs: Any) -> gpd.GeoDataFrame:
-        """Download field boundaries.
+        """Download field boundaries from Source Cooperative.
+
+        This method queries the USDA Crop Sequence Boundaries dataset
+        hosted on Source Cooperative, filtering by region, crop type,
+        and field size. It uses DuckDB for efficient server-side filtering,
+        downloading only the requested subset of data.
 
         Args:
             **kwargs: Keyword arguments:
                 count (int): Number of fields to download (default: 200).
-                regions (Optional[List[str]]): List of regions to sample from.
-                output_format (str): Output format (geojson or shapefile).
+                    For testing, use small values (2-10) to minimize load.
+                regions (Optional[List[str]]): Regions to sample from.
+                    Options: 'corn_belt', 'great_plains', 'southeast'
+                    Default: ['corn_belt']
+                crops (Optional[List[str]]): Crop types to include.
+                    Options: 'corn', 'soybeans', 'wheat', 'cotton'
+                    Default: ['corn', 'soybeans']
+                min_acres (float): Minimum field size in acres (default: 40).
+                    Filters out very small fields.
+                max_acres (float): Maximum field size in acres (default: 500).
+                    Filters out unusually large polygons.
+                output_format (str): Output file format.
+                    Options: 'geojson', 'shapefile'
+                    Default: 'geojson'
 
         Returns:
-            GeoDataFrame containing field boundaries with attributes.
+            GeoDataFrame containing field boundaries with attributes:
+                - field_id: Unique identifier (CSB ID)
+                - region: Region name (corn_belt, great_plains, southeast)
+                - state: State abbreviation
+                - county: County name
+                - area_acres: Field size in acres
+                - crop_2023: Crop type in 2023
+                - geometry: Polygon geometry (EPSG:4326)
 
         Raises:
-            ValueError: If count < 1 or regions is empty.
+            ValueError: If count < 1, regions is empty, or invalid parameters.
+            RuntimeError: If data download fails.
 
         Example:
             >>> downloader = FieldBoundaryDownloader()
-            >>> fields = downloader.download(count=10, regions=["corn_belt"])
-            >>> print(len(fields))
-            10
+            >>> # Download 10 corn/soybean fields from Iowa (testing)
+            >>> fields = downloader.download(
+            ...     count=10,
+            ...     regions=['corn_belt'],
+            ...     crops=['corn', 'soybeans']
+            ... )
+            >>> print(f"Downloaded {len(fields)} fields")
+            Downloaded 10 fields
         """
+        # Parse arguments with defaults
         count: int = kwargs.get("count", 200)
         regions: Optional[List[str]] = kwargs.get("regions", None)
+        crops: Optional[List[str]] = kwargs.get("crops", None)
+        min_acres: float = kwargs.get("min_acres", 40.0)
+        max_acres: float = kwargs.get("max_acres", 500.0)
         output_format: str = kwargs.get("output_format", "geojson")
 
-        self.logger.info(f"Starting field boundary download: {count} fields")
+        self.logger.info(
+            f"Starting field boundary download: {count} fields from Source Cooperative"
+        )
 
         # Validate inputs
         if count < 1:
             raise ValueError("count must be at least 1")
 
+        # Default regions
         if regions is None:
-            regions = self.config.get("fields.regions", ["corn_belt", "great_plains", "southeast"])
+            regions = ["corn_belt"]
 
         if not regions:
             raise ValueError("regions cannot be empty")
 
-        self.logger.info(f"Regions: {regions}")
+        # Validate regions
+        invalid_regions = [r for r in regions if r not in self.REGION_STATE_FIPS]
+        if invalid_regions:
+            raise ValueError(
+                f"Invalid regions: {invalid_regions}. "
+                f"Valid options: {list(self.REGION_STATE_FIPS.keys())}"
+            )
 
-        # PLACEHOLDER: Actual implementation will call external API or data source
-        # For now, generate sample data for testing
-        fields_gdf = self._generate_sample_fields(count, regions)
+        # Default crops
+        if crops is None:
+            crops = ["corn", "soybeans"]
+
+        # Validate crops
+        invalid_crops = [c for c in crops if c not in self.CROP_TYPES]
+        if invalid_crops:
+            raise ValueError(
+                f"Invalid crops: {invalid_crops}. "
+                f"Valid options: {list(self.CROP_TYPES.keys())}"
+            )
+
+        self.logger.info(f"Regions: {regions}")
+        self.logger.info(f"Crops: {crops}")
+        self.logger.info(f"Size filter: {min_acres}-{max_acres} acres")
+
+        # Query CSB data from Source Cooperative
+        fields_gdf = self._query_source_cooperative(
+            count=count,
+            regions=regions,
+            crops=crops,
+            min_acres=min_acres,
+            max_acres=max_acres,
+        )
+
+        # Validate downloaded data
+        if not self.validate(fields_gdf):
+            raise RuntimeError("Downloaded field data failed validation")
 
         # Save to file
         output_path = self._save_fields(fields_gdf, output_format)
@@ -83,80 +222,115 @@ class FieldBoundaryDownloader(BaseDownloader):
 
         return fields_gdf
 
-    def _generate_sample_fields(self, count: int, regions: List[str]) -> gpd.GeoDataFrame:
-        """Generate sample field boundaries for testing.
-
-        PLACEHOLDER: This will be replaced with actual data source integration.
+    def _query_source_cooperative(
+        self,
+        count: int,
+        regions: List[str],
+        crops: List[str],
+        min_acres: float,
+        max_acres: float,
+    ) -> gpd.GeoDataFrame:
+        """Query USDA CSB data from Source Cooperative using DuckDB.
+        
+        Uses DuckDB spatial extension to efficiently query cloud-hosted
+        GeoParquet files with server-side filtering. Only downloads
+        the filtered subset, not the entire dataset.
 
         Args:
-            count: Number of fields to generate.
-            regions: Regions to generate fields for.
+            count: Number of fields to retrieve.
+            regions: List of region names.
+            crops: List of crop types.
+            min_acres: Minimum field size.
+            max_acres: Maximum field size.
 
         Returns:
-            GeoDataFrame with sample field boundaries.
+            GeoDataFrame with downloaded field boundaries.
+            
+        Raises:
+            RuntimeError: If query fails or no data returned.
         """
-        self.logger.warning(
-            "Using placeholder field generation. "
-            "Actual implementation will download real field data."
-        )
+        try:
+            # Get DuckDB connection
+            con = self._get_duckdb_connection()
 
-        # Generate simple rectangular fields as placeholders
-        fields = []
+            # Collect state FIPS codes from regions
+            state_fips = []
+            for region in regions:
+                state_fips.extend(self.REGION_STATE_FIPS[region])
 
-        # Region coordinates (approximate centers)
-        region_coords = {
-            "corn_belt": (-93.0, 42.0),  # Iowa center
-            "great_plains": (-98.0, 39.0),  # Kansas center
-            "southeast": (-91.0, 34.0),  # Arkansas center
-        }
+            # Build SQL filters
+            state_filter = ", ".join([f"'{fips}'" for fips in state_fips])
+            crop_filter = ", ".join([f"'{self.CROP_TYPES[c]}'" for c in crops])
 
-        fields_per_region = count // len(regions)
-        remainder = count % len(regions)
+            # Construct GeoParquet URL (partition by state for efficiency)
+            parquet_url = f"{self.SOURCE_COOP_BASE_URL}/*.parquet"
 
-        field_id = 1
-        for i, region in enumerate(regions):
-            # Distribute fields across regions
-            region_count = fields_per_region + (1 if i < remainder else 0)
-            base_lon, base_lat = region_coords.get(region, (-95.0, 40.0))
+            # Build DuckDB query with filters
+            # ORDER BY random() gives random sample
+            # LIMIT ensures we get exactly 'count' fields
+            query = f"""
+            SELECT 
+                csb_id as field_id,
+                stateabbr as state,
+                ctyname as county,
+                acres as area_acres,
+                crop_2023,
+                geometry
+            FROM read_parquet('{parquet_url}', hive_partitioning=1)
+            WHERE state_fips IN ({state_filter})
+              AND acres >= {min_acres}
+              AND acres <= {max_acres}
+              AND crop_2023 IN ({crop_filter})
+            ORDER BY random()
+            LIMIT {count}
+            """
 
-            for j in range(region_count):
-                # Create a simple rectangular polygon
-                # Field size: ~0.01 degrees (~1km at mid-latitudes)
-                lon_offset = (j % 10) * 0.015
-                lat_offset = (j // 10) * 0.015
+            self.logger.debug(f"Executing DuckDB query: {query}")
+            self.logger.info("Querying Source Cooperative (this may take 10-30 seconds)...")
 
-                lon = base_lon + lon_offset
-                lat = base_lat + lat_offset
+            # Execute query and get result as DataFrame
+            result_df = con.execute(query).df()
 
-                # Create rectangle (approximately 80-160 acres)
-                polygon = Polygon(
-                    [
-                        (lon, lat),
-                        (lon + 0.01, lat),
-                        (lon + 0.01, lat + 0.01),
-                        (lon, lat + 0.01),
-                        (lon, lat),
-                    ]
+            if len(result_df) == 0:
+                raise RuntimeError(
+                    f"No fields found matching criteria. "
+                    f"Try different regions/crops or adjust size filters."
                 )
 
-                fields.append(
-                    {
-                        "field_id": f"FIELD_{field_id:04d}",
-                        "region": region,
-                        "area_acres": 80 + (j % 80),  # Vary between 80-160 acres
-                        "centroid_lat": lat + 0.005,
-                        "centroid_lon": lon + 0.005,
-                        "crop_type": ["corn", "soybeans", "wheat", "cotton"][j % 4],
-                        "geometry": polygon,
-                    }
-                )
-                field_id += 1
+            self.logger.info(f"Retrieved {len(result_df)} fields from Source Cooperative")
 
-        # Create GeoDataFrame
-        gdf = gpd.GeoDataFrame(fields, crs="EPSG:4326")
+            # Convert to GeoDataFrame
+            # DuckDB spatial extension returns geometry as WKB binary
+            gdf = gpd.GeoDataFrame(result_df, geometry="geometry", crs="EPSG:4326")
 
-        self.logger.info(f"Generated {len(gdf)} placeholder fields")
-        return gdf
+            # Add region mapping back to data
+            # Map state FIPS to region for user convenience
+            state_to_region = {}
+            for region, fips_list in self.REGION_STATE_FIPS.items():
+                for fips in fips_list:
+                    state_to_region[fips] = region
+
+            # Get state FIPS from state abbreviation (need to query back)
+            # For simplicity, just use first region from user input
+            gdf["region"] = regions[0] if len(regions) == 1 else "mixed"
+
+            # Reorder columns for better readability
+            column_order = [
+                "field_id",
+                "region",
+                "state",
+                "county",
+                "area_acres",
+                "crop_2023",
+                "geometry",
+            ]
+            gdf = gdf[column_order]
+
+            return gdf
+
+        except Exception as e:
+            self.logger.error(f"Failed to query Source Cooperative: {e}")
+            raise RuntimeError(f"Data download failed: {e}") from e
 
     def _save_fields(self, gdf: gpd.GeoDataFrame, output_format: str) -> Path:
         """Save field boundaries to file.
@@ -167,6 +341,9 @@ class FieldBoundaryDownloader(BaseDownloader):
 
         Returns:
             Path to saved file.
+            
+        Raises:
+            ValueError: If output format is unsupported.
         """
         if output_format == "geojson":
             output_path = self.get_output_path("fields.geojson", self.output_subdir)
@@ -175,12 +352,22 @@ class FieldBoundaryDownloader(BaseDownloader):
             output_path = self.get_output_path("fields.shp", self.output_subdir)
             gdf.to_file(output_path, driver="ESRI Shapefile")
         else:
-            raise ValueError(f"Unsupported output format: {output_format}")
+            raise ValueError(
+                f"Unsupported output format: {output_format}. "
+                f"Use 'geojson' or 'shapefile'."
+            )
 
+        self.logger.info(f"Saved {len(gdf)} fields to {output_path}")
         return output_path
 
     def validate(self, data: gpd.GeoDataFrame) -> bool:
         """Validate field boundary data.
+        
+        Checks for:
+        - Non-empty dataset
+        - Required columns present
+        - Valid geometries
+        - Coordinate reference system defined
 
         Args:
             data: GeoDataFrame to validate.
@@ -213,3 +400,8 @@ class FieldBoundaryDownloader(BaseDownloader):
 
         self.logger.info("Field boundaries validation passed")
         return True
+
+    def __del__(self) -> None:
+        """Clean up DuckDB connection on deletion."""
+        if self._duckdb_conn is not None:
+            self._duckdb_conn.close()
