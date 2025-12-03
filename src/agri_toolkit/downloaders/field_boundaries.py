@@ -55,7 +55,7 @@ class FieldBoundaryDownloader(BaseDownloader):
 
         Example:
             >>> downloader = FieldBoundaryDownloader()
-            >>> fields = downloader.download(count=10, regions=['corn_belt'])
+            >>> fields = downloader.download(count=10, regions=["corn_belt"])
             >>> print(len(fields))
             10
         """
@@ -85,7 +85,9 @@ class FieldBoundaryDownloader(BaseDownloader):
 
         return fields_gdf
 
-    def _generate_sample_fields(self, count: int, regions: List[str]) -> gpd.GeoDataFrame:
+    def _generate_sample_fields(
+        self, count: int, regions: List[str]
+    ) -> gpd.GeoDataFrame:
         """Generate sample field boundaries for testing.
 
         PLACEHOLDER: This will be replaced with actual data source integration.
