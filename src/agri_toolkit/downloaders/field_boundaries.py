@@ -5,11 +5,12 @@ across diverse US agricultural regions.
 """
 
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import geopandas as gpd
 from shapely.geometry import Polygon
 
+from agri_toolkit.core.config import Config
 from agri_toolkit.downloaders.base import BaseDownloader
 
 
@@ -24,7 +25,7 @@ class FieldBoundaryDownloader(BaseDownloader):
     Crops: corn, soybeans, wheat, cotton
     """
 
-    def __init__(self, config=None):
+    def __init__(self, config: Optional[Config] = None) -> None:
         """Initialize field boundary downloader.
 
         Args:
@@ -33,19 +34,14 @@ class FieldBoundaryDownloader(BaseDownloader):
         super().__init__(config)
         self.output_subdir = "field_boundaries"
 
-    def download(
-        self,
-        count: int = 200,
-        regions: Optional[List[str]] = None,
-        output_format: str = "geojson",
-    ) -> gpd.GeoDataFrame:
+    def download(self, **kwargs: Any) -> gpd.GeoDataFrame:
         """Download field boundaries.
 
         Args:
-            count: Number of fields to download (default: 200).
-            regions: List of regions to sample from. If None, uses all regions
-                    from config (corn_belt, great_plains, southeast).
-            output_format: Output format (geojson or shapefile).
+            **kwargs: Keyword arguments:
+                count (int): Number of fields to download (default: 200).
+                regions (Optional[List[str]]): List of regions to sample from.
+                output_format (str): Output format (geojson or shapefile).
 
         Returns:
             GeoDataFrame containing field boundaries with attributes.
@@ -59,6 +55,10 @@ class FieldBoundaryDownloader(BaseDownloader):
             >>> print(len(fields))
             10
         """
+        count: int = kwargs.get("count", 200)
+        regions: Optional[List[str]] = kwargs.get("regions", None)
+        output_format: str = kwargs.get("output_format", "geojson")
+
         self.logger.info(f"Starting field boundary download: {count} fields")
 
         # Validate inputs
