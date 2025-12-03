@@ -1,12 +1,13 @@
 """Tests for field boundary downloader."""
 
-import pytest
-import geopandas as gpd
 from pathlib import Path
+
+import geopandas as gpd
+import pytest
 from shapely.geometry import Polygon
 
-from agri_toolkit.downloaders.field_boundaries import FieldBoundaryDownloader
 from agri_toolkit.core.config import Config
+from agri_toolkit.downloaders.field_boundaries import FieldBoundaryDownloader
 
 
 class TestFieldBoundaryDownloader:
@@ -59,9 +60,7 @@ class TestFieldBoundaryDownloader:
         fields = downloader.download(count=10, regions=["corn_belt"])
 
         assert fields.crs is not None, "GeoDataFrame missing CRS"
-        assert (
-            fields.crs.to_string() == "EPSG:4326"
-        ), "CRS should be WGS84 (EPSG:4326)"
+        assert fields.crs.to_string() == "EPSG:4326", "CRS should be WGS84 (EPSG:4326)"
 
     def test_download_multiple_regions(self, downloader):
         """Test downloading from multiple regions."""
