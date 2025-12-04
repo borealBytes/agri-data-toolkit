@@ -13,47 +13,52 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write  # Allow pushing changes
-    
+
     steps:
       - name: Check out code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.ref }}  # Checkout the pushed branch
           token: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      
+
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
           version: latest
           virtualenvs-create: true
           virtualenvs-in-project: true
-      
+
       - name: Load cached venv
         id: cached-poetry-dependencies
         uses: actions/cache@v4
         with:
           path: .venv
           key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
-      
+
       - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install --no-interaction --with dev
-      
+
+      - name: Run autopep8 (whitespace cleanup)
+        run: |
+          poetry run autopep8 --in-place --recursive --select=W src/ tests/
+          echo "autopep8 whitespace cleanup complete"
+
       - name: Run Black formatter
         run: |
           poetry run black src/ tests/
           echo "Black formatting complete"
-      
+
       - name: Run isort
         run: |
           poetry run isort src/ tests/
           echo "Import sorting complete"
-      
+
       - name: Check for changes
         id: verify-changed-files
         run: |
@@ -65,22 +70,25 @@ jobs:
             echo "Formatting changes detected:"
             git status --short
           fi
-      
+
       - name: Commit and push changes
         if: steps.verify-changed-files.outputs.changed == 'true'
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add -A
-          git commit -m "style: auto-format code with Black and isort [skip ci]"
+          git commit -m "style: auto-format code with autopep8, Black and isort [skip ci]"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Summary
         run: |
           if [[ "${{ steps.verify-changed-files.outputs.changed }}" == "true" ]]; then
             echo "✅ Code was auto-formatted and committed"
+            echo "   - autopep8: Whitespace cleanup (W errors)"
+            echo "   - Black: Code formatting"
+            echo "   - isort: Import sorting"
           else
             echo "✅ Code is already properly formatted"
           fi
