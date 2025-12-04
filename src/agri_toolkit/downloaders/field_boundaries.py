@@ -165,8 +165,7 @@ class FieldBoundaryDownloader(BaseDownloader):
         output_format: str = kwargs.get("output_format", "geojson")
 
         self.logger.info(
-            "Starting field boundary download: %d fields from Source Cooperative",
-            count
+            "Starting field boundary download: %d fields from Source Cooperative", count
         )
 
         # Validate inputs
@@ -284,7 +283,14 @@ class FieldBoundaryDownloader(BaseDownloader):
               AND crop_2023 IN (%s)
             ORDER BY random()
             LIMIT %d
-            """ % (parquet_url, state_filter, min_acres, max_acres, crop_filter, count)
+            """ % (
+                parquet_url,
+                state_filter,
+                min_acres,
+                max_acres,
+                crop_filter,
+                count,
+            )
 
             self.logger.debug("Executing DuckDB query: %s", query)
             self.logger.info("Querying Source Cooperative (this may take 10-30 seconds)...")
@@ -354,8 +360,7 @@ class FieldBoundaryDownloader(BaseDownloader):
             gdf.to_file(output_path, driver="ESRI Shapefile")
         else:
             raise ValueError(
-                "Unsupported output format: %s. Use 'geojson' or 'shapefile'."
-                % output_format
+                "Unsupported output format: %s. Use 'geojson' or 'shapefile'." % output_format
             )
 
         self.logger.info("Saved %d fields to %s", len(gdf), output_path)
