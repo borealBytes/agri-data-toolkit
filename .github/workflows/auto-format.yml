@@ -38,10 +38,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+          key: venv-autoformat-${{ runner.os }}-3.13-${{ hashFiles('**/poetry.lock') }}
 
       - name: Install dependencies
-        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        # Always install if cache miss OR if pyproject.toml changed (ensures new deps installed)
         run: poetry install --no-interaction --with dev
 
       - name: Run autopep8 (whitespace cleanup)
