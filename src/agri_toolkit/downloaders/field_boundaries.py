@@ -6,13 +6,13 @@ from the USDA NASS Crop Sequence Boundaries (CSB) dataset via Source Cooperative
 Data Source:
     USDA NASS Crop Sequence Boundaries (2023)
     https://source.coop/fiboa/us-usda-cropland
-    
+
 Format:
     GeoParquet (cloud-optimized columnar format)
-    
+
 Coverage:
     Entire contiguous United States, 16+ million field boundaries
-    
+
 Attributes:
     - Field ID, state/county FIPS codes
     - Acreage (field size)
@@ -20,9 +20,9 @@ Attributes:
     - Geometry (polygon boundaries in EPSG:4326)
 
 Citation:
-    USDA National Agricultural Statistics Service Cropland Data Layer. 
-    {YEAR}. Published crop-specific data layer [Online]. 
-    Available at https://nassgeodata.gmu.edu/CropScape/ 
+    USDA National Agricultural Statistics Service Cropland Data Layer.
+    {YEAR}. Published crop-specific data layer [Online].
+    Available at https://nassgeodata.gmu.edu/CropScape/
     (verified {date}). USDA-NASS, Washington, DC.
 """
 
@@ -165,7 +165,8 @@ class FieldBoundaryDownloader(BaseDownloader):
         output_format: str = kwargs.get("output_format", "geojson")
 
         self.logger.info(
-            f"Starting field boundary download: {count} fields from Source Cooperative"
+            "Starting field boundary download: %d fields from Source Cooperative",
+            count
         )
 
         # Validate inputs
@@ -183,8 +184,8 @@ class FieldBoundaryDownloader(BaseDownloader):
         invalid_regions = [r for r in regions if r not in self.REGION_STATE_FIPS]
         if invalid_regions:
             raise ValueError(
-                f"Invalid regions: {invalid_regions}. "
-                f"Valid options: {list(self.REGION_STATE_FIPS.keys())}"
+                "Invalid regions: %s. Valid options: %s"
+                % (invalid_regions, list(self.REGION_STATE_FIPS.keys()))
             )
 
         # Default crops
@@ -195,12 +196,13 @@ class FieldBoundaryDownloader(BaseDownloader):
         invalid_crops = [c for c in crops if c not in self.CROP_TYPES]
         if invalid_crops:
             raise ValueError(
-                f"Invalid crops: {invalid_crops}. " f"Valid options: {list(self.CROP_TYPES.keys())}"
+                "Invalid crops: %s. Valid options: %s"
+                % (invalid_crops, list(self.CROP_TYPES.keys()))
             )
 
-        self.logger.info(f"Regions: {regions}")
-        self.logger.info(f"Crops: {crops}")
-        self.logger.info(f"Size filter: {min_acres}-{max_acres} acres")
+        self.logger.info("Regions: %s", regions)
+        self.logger.info("Crops: %s", crops)
+        self.logger.info("Size filter: %s-%s acres", min_acres, max_acres)
 
         # Query CSB data from Source Cooperative
         fields_gdf = self._query_source_cooperative(
@@ -217,7 +219,7 @@ class FieldBoundaryDownloader(BaseDownloader):
 
         # Save to file
         output_path = self._save_fields(fields_gdf, output_format)
-        self.logger.info(f"Fields saved to: {output_path}")
+        self.logger.info("Fields saved to: %s", output_path)
 
         return fields_gdf
 
@@ -258,33 +260,33 @@ class FieldBoundaryDownloader(BaseDownloader):
                 state_fips.extend(self.REGION_STATE_FIPS[region])
 
             # Build SQL filters
-            state_filter = ", ".join([f"'{fips}'" for fips in state_fips])
-            crop_filter = ", ".join([f"'{self.CROP_TYPES[c]}'" for c in crops])
+            state_filter = ", ".join(["'%s'" % fips for fips in state_fips])
+            crop_filter = ", ".join(["'%s'" % self.CROP_TYPES[c] for c in crops])
 
             # Construct GeoParquet URL (partition by state for efficiency)
-            parquet_url = f"{self.SOURCE_COOP_BASE_URL}/*.parquet"
+            parquet_url = "%s/*.parquet" % self.SOURCE_COOP_BASE_URL
 
             # Build DuckDB query with filters
             # ORDER BY random() gives random sample
             # LIMIT ensures we get exactly 'count' fields
-            query = f"""
-            SELECT 
+            query = """
+            SELECT
                 csb_id as field_id,
                 stateabbr as state,
                 ctyname as county,
                 acres as area_acres,
                 crop_2023,
                 geometry
-            FROM read_parquet('{parquet_url}', hive_partitioning=1)
-            WHERE state_fips IN ({state_filter})
-              AND acres >= {min_acres}
-              AND acres <= {max_acres}
-              AND crop_2023 IN ({crop_filter})
+            FROM read_parquet('%s', hive_partitioning=1)
+            WHERE state_fips IN (%s)
+              AND acres >= %s
+              AND acres <= %s
+              AND crop_2023 IN (%s)
             ORDER BY random()
-            LIMIT {count}
-            """
+            LIMIT %d
+            """ % (parquet_url, state_filter, min_acres, max_acres, crop_filter, count)
 
-            self.logger.debug(f"Executing DuckDB query: {query}")
+            self.logger.debug("Executing DuckDB query: %s", query)
             self.logger.info("Querying Source Cooperative (this may take 10-30 seconds)...")
 
             # Execute query and get result as DataFrame
@@ -292,11 +294,11 @@ class FieldBoundaryDownloader(BaseDownloader):
 
             if len(result_df) == 0:
                 raise RuntimeError(
-                    f"No fields found matching criteria. "
-                    f"Try different regions/crops or adjust size filters."
+                    "No fields found matching criteria. "
+                    "Try different regions/crops or adjust size filters."
                 )
 
-            self.logger.info(f"Retrieved {len(result_df)} fields from Source Cooperative")
+            self.logger.info("Retrieved %d fields from Source Cooperative", len(result_df))
 
             # Convert to GeoDataFrame
             # DuckDB spatial extension returns geometry as WKB binary
@@ -328,8 +330,8 @@ class FieldBoundaryDownloader(BaseDownloader):
             return gdf
 
         except Exception as e:
-            self.logger.error(f"Failed to query Source Cooperative: {e}")
-            raise RuntimeError(f"Data download failed: {e}") from e
+            self.logger.error("Failed to query Source Cooperative: %s", e)
+            raise RuntimeError("Data download failed: %s" % e) from e
 
     def _save_fields(self, gdf: gpd.GeoDataFrame, output_format: str) -> Path:
         """Save field boundaries to file.
@@ -352,10 +354,11 @@ class FieldBoundaryDownloader(BaseDownloader):
             gdf.to_file(output_path, driver="ESRI Shapefile")
         else:
             raise ValueError(
-                f"Unsupported output format: {output_format}. " f"Use 'geojson' or 'shapefile'."
+                "Unsupported output format: %s. Use 'geojson' or 'shapefile'."
+                % output_format
             )
 
-        self.logger.info(f"Saved {len(gdf)} fields to {output_path}")
+        self.logger.info("Saved %d fields to %s", len(gdf), output_path)
         return output_path
 
     def validate(self, data: gpd.GeoDataFrame) -> bool:
@@ -382,13 +385,13 @@ class FieldBoundaryDownloader(BaseDownloader):
         missing_columns = [col for col in required_columns if col not in data.columns]
 
         if missing_columns:
-            self.logger.error(f"Missing required columns: {missing_columns}")
+            self.logger.error("Missing required columns: %s", missing_columns)
             return False
 
         # Check geometry validity
         invalid_geoms = ~data.geometry.is_valid
         if invalid_geoms.any():
-            self.logger.error(f"Found {invalid_geoms.sum()} invalid geometries")
+            self.logger.error("Found %d invalid geometries", invalid_geoms.sum())
             return False
 
         # Check CRS
