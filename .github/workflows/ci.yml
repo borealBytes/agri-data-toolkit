@@ -3,9 +3,7 @@ name: CI/CD Pipeline
 on:
   pull_request:
     branches: [ main ]
-  push:
-    branches: [ main ]
-  # Also trigger after auto-format workflow completes
+  # CI runs AFTER auto-format workflow completes (not on push directly)
   workflow_run:
     workflows: ["Auto Format Code"]
     types:
@@ -14,10 +12,9 @@ on:
 jobs:
   # Job 1: Lint first (fastest, cheapest)
   lint:
-    # Skip if triggered by auto-format workflow that failed
+    # Only run if auto-format succeeded or PR has preview-ready label
     if: |
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-      (github.event_name == 'push') ||
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview-ready'))
     
     runs-on: ubuntu-latest
@@ -68,7 +65,6 @@ jobs:
     needs: lint
     if: |
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-      (github.event_name == 'push') ||
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview-ready'))
     
     runs-on: ubuntu-latest
@@ -128,7 +124,6 @@ jobs:
     needs: [lint, test]
     if: |
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-      (github.event_name == 'push') ||
       (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'preview-ready'))
     
     runs-on: ubuntu-latest
