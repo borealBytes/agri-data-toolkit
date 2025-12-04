@@ -1,17 +1,19 @@
 name: CI/CD Pipeline
 
 on:
-  # CI runs ONLY after auto-format workflow completes
-  # This ensures we always check the formatted code, not the original push
+  # CI runs AFTER auto-format workflow completes successfully
+  # This ensures we always check the formatted code (or original if no changes)
   workflow_run:
     workflows: ["Auto Format Code"]
     types:
       - completed
+    branches:
+      - '**'  # Run for all branches
 
 jobs:
   # Job 1: Lint first (fastest, cheapest)
   lint:
-    # Only run if auto-format succeeded
+    # Only run if auto-format succeeded (whether it made changes or not)
     if: github.event.workflow_run.conclusion == 'success'
     
     runs-on: ubuntu-latest
@@ -20,7 +22,8 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        # Check out the branch that triggered auto-format (with any formatting changes)
+        # Check out the branch that triggered auto-format
+        # This gets the latest commit (formatted or original)
         ref: ${{ github.event.workflow_run.head_branch }}
     
     - name: Set up Python 3.13
