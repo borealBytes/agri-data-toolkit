@@ -1,299 +1,391 @@
-# CI/CD Workflows
+# CI/CD Workflow
 
-This project uses automated workflows to maintain code quality without manual intervention.
+This project uses a **single unified pipeline** that auto-formats code, then runs linting, testing, and building - all in one sequential workflow.
 
 ## Overview
 
 ```
-Code Push (AI Agent or Human)
-        ↓
-   Auto-Format Workflow
-   ├─ Black formatter
-   ├─ isort import sorter
-   └─ Commit if changes needed
-        ↓
-   CI/CD Pipeline
-   ├─ Lint (Black, isort, flake8, mypy)
-   ├─ Test (pytest with coverage)
-   └─ Build (poetry build)
-        ├─ With 'generate-build-artifact' label → Save artifacts
-        └─ Without label → Skip artifacts (saves storage)
+Push to branch
+    ↓
+Job 1: Format
+   ├─ autopep8 (whitespace)
+   ├─ Black (code formatting)
+   ├─ isort (import sorting)
+   └─ Commit if changes (optional)
+    ↓
+Job 2: Lint (on formatted code)
+   ├─ Black --check
+   ├─ isort --check
+   ├─ flake8
+   └─ mypy
+    ↓
+Job 3: Test (after lint passes)
+   ├─ Install GDAL
+   ├─ pytest with coverage
+   └─ Upload to Codecov
+    ↓
+Job 4: Build (after test passes)
+   ├─ poetry build
+   └─ Upload artifacts (if labeled)
 ```
 
-## Workflows
+## Key Features
 
-### 1. Auto-Format Workflow (`.github/workflows/auto-format.yml`)
+✅ **Single workflow** - No race conditions, no complexity  
+✅ **Auto-format first** - Always formats before CI checks  
+✅ **Sequential jobs** - Each job waits for previous to pass  
+✅ **Format commit included** - Commits are part of the pipeline  
+✅ **Same SHA for all jobs** - All jobs run on formatted code  
+✅ **Zero maintenance** - Just push code, pipeline handles rest  
 
-**Trigger:** Every push to any branch
+## Workflow File
 
-**Purpose:** Automatically format code to project standards
+**Location**: `.github/workflows/ci.yml`
 
-**Steps:**
+**Triggers**:
+- `push` - Any push to any branch
+- `pull_request` - PRs targeting main branch
+
+## Job Details
+
+### Job 1: Format
+
+**Purpose**: Auto-format code using autopep8, Black, and isort
+
+**Steps**:
 1. Checkout code
 2. Install Poetry and dependencies
-3. Run Black formatter
-4. Run isort import sorter
-5. If changes detected:
-   - Commit with message: `style: auto-format code with Black and isort [skip ci]`
-   - Push to same branch
-6. If no changes: Skip commit
+3. Run autopep8 (whitespace cleanup)
+4. Run Black (code formatting)
+5. Run isort (import sorting)
+6. Check if formatting made changes
+7. If changes: commit and push
+8. Export SHA for next jobs
 
-**Special Notes:**
-- Uses `[skip ci]` to prevent infinite loops
-- Commits as `github-actions[bot]`
-- Runs fast (~30-60 seconds)
+**Key behavior**:
+- Commits formatting changes back to the branch
+- Uses `github-actions[bot]` as committer
+- NO `[skip ci]` tag - we want CI to run on formatted code
+- Outputs SHA for downstream jobs to use
 
-### 2. CI/CD Pipeline (`.github/workflows/ci.yml`)
+**Time**: ~30-60 seconds
 
-**Trigger:** 
-- Push to main branch
-- Pull requests with `preview-ready` label
-- After auto-format workflow completes
+### Job 2: Lint
 
-**Jobs:**
+**Purpose**: Validate code quality and style
 
-#### Job 1: Lint
-- Check Black formatting
-- Check isort import order
-- Run flake8 linting
-- Run mypy type checking
-- **Fast:** ~1-2 minutes
+**Dependencies**: Waits for `format` job
 
-#### Job 2: Test (runs after lint)
-- Install GDAL dependencies
-- Run pytest with coverage
-- Upload coverage to Codecov
-- **Medium:** ~3-5 minutes
+**Checks out**: The SHA from format job (formatted code)
 
-#### Job 3: Build (runs after test)
-- Build package with Poetry
-- **Conditionally** store artifacts (see labels below)
-- **Fast:** ~1 minute
+**Steps**:
+1. Black --check (formatting validation)
+2. isort --check (import order validation)
+3. flake8 (style linting)
+4. mypy (type checking)
 
-**Total Time:** ~5-8 minutes for full pipeline
+**Time**: ~1-2 minutes
+
+### Job 3: Test
+
+**Purpose**: Run test suite with coverage
+
+**Dependencies**: Waits for `format` and `lint` jobs
+
+**Checks out**: The SHA from format job (formatted code)
+
+**Steps**:
+1. Install GDAL system dependencies
+2. Run pytest with coverage
+3. Upload coverage to Codecov
+
+**Time**: ~3-5 minutes
+
+### Job 4: Build
+
+**Purpose**: Build package and optionally store artifacts
+
+**Dependencies**: Waits for `format`, `lint`, and `test` jobs
+
+**Checks out**: The SHA from format job (formatted code)
+
+**Steps**:
+1. Build package with Poetry
+2. Check if PR and has `generate-build-artifact` label
+3. Upload artifacts if labeled
+
+**Time**: ~1 minute
+
+## Execution Guarantee
+
+✅ **Format always runs first** - Happens before any checks  
+✅ **All jobs use formatted code** - Same SHA across pipeline  
+✅ **No race conditions** - Sequential job dependencies  
+✅ **Atomic commits** - Format commits part of pipeline  
+
+## Execution Flow Examples
+
+### Scenario 1: Code needs formatting
+
+```
+1. Developer pushes unformatted code
+2. Format job runs:
+   - Formats code
+   - Commits changes (new SHA created)
+   - Exports new SHA
+3. Lint job runs on formatted SHA
+4. Test job runs on formatted SHA
+5. Build job runs on formatted SHA
+
+Result: ✅ All pass, branch has 2 commits (original + format)
+```
+
+### Scenario 2: Code already formatted
+
+```
+1. Developer pushes formatted code
+2. Format job runs:
+   - Checks code
+   - No changes needed
+   - Exports current SHA
+3. Lint job runs on current SHA
+4. Test job runs on current SHA
+5. Build job runs on current SHA
+
+Result: ✅ All pass, branch has 1 commit (original)
+```
+
+### Scenario 3: Tests fail
+
+```
+1. Developer pushes code
+2. Format job runs: ✅ Pass
+3. Lint job runs: ✅ Pass
+4. Test job runs: ❌ Fail
+5. Build job skipped (dependency failed)
+
+Result: ❌ Pipeline fails at test stage
+```
 
 ## Labels
 
-### `preview-ready`
+### `generate-build-artifact`
 
-Add this label to PRs to trigger full CI/CD pipeline:
+**Purpose**: Control whether to upload build artifacts
 
+**Usage**:
 ```bash
-# Via GitHub UI: Add label "preview-ready" to PR
-# Via GitHub CLI:
-gh pr edit <PR_NUMBER> --add-label "preview-ready"
-```
-
-Without this label:
-- Auto-format still runs
-- CI/CD waits for label
-
-### `generate-build-artifact` (New!)
-
-**Purpose:** Control whether build artifacts are stored
-
-**Why:** Saves GitHub storage costs by not storing artifacts you'll never use
-
-**Behavior:**
-- ✅ **With label:** Build artifacts uploaded to GitHub (7 day retention)
-- ⏭️ **Without label:** Build runs successfully but artifacts NOT stored
-
-**When to use:**
-```bash
-# Add this label when you need the .whl and .tar.gz files
 gh pr edit <PR_NUMBER> --add-label "generate-build-artifact"
-
-# Examples:
-# - Testing pip installation from built package
-# - Preparing for release
-# - Sharing package with collaborators
-# - Debugging build issues
 ```
 
-**When to skip:**
-- Regular development PRs (default)
-- Just running tests
-- Code review PRs
-- Most daily work
+**Behavior**:
+- ✅ With label: Artifacts uploaded for 7 days
+- ❌ Without label: Build runs but artifacts not stored
 
-**Cost savings:**
-- Typical PR: No artifacts = $0 storage
-- With artifacts: ~5-10MB stored for 7 days
-- Over dozens of PRs: Significant savings!
+**When to use**:
+- Testing pip installation
+- Preparing for release
+- Sharing with collaborators
+- Debugging build issues
 
-**Note:** Build ALWAYS runs (to verify it works), but artifacts only stored when labeled.
+**Cost savings**: Most PRs don't need artifacts stored
+
+## For Developers
+
+### Local Development
+
+**Option 1: Pre-commit hooks (Recommended)**
+```bash
+poetry run pre-commit install
+git commit -m "feat: new feature"  # Auto-formats locally
+```
+
+**Option 2: Manual formatting**
+```bash
+poetry run autopep8 --in-place --recursive --select=W src/ tests/
+poetry run black src/ tests/
+poetry run isort src/ tests/
+git commit -m "feat: new feature"
+```
+
+**Option 3: Let CI do it**
+```bash
+git commit -m "feat: new feature"
+git push  # Pipeline formats automatically
+```
+
+### Understanding Pipeline Status
+
+**Green checkmark (✅)**: All jobs passed
+- Code is formatted
+- Linting passed
+- Tests passed
+- Build succeeded
+
+**Red X (❌)**: Pipeline failed
+- Check which job failed
+- Format job rarely fails (only on syntax errors)
+- Lint job fails on style issues
+- Test job fails on test failures
+- Build job fails on package issues
+
+**Yellow dot (🟡)**: Pipeline running
+- Wait for completion
+- Typically 5-8 minutes total
 
 ## For AI Agents
 
-### Current Workflow
+### Workflow
 
 ```bash
 # AI agent pushes code via GitHub API
-# (happens automatically in Perplexity/MCP)
+# Pipeline automatically:
+1. Formats code (autopep8, Black, isort)
+2. Commits formatting if needed
+3. Runs lint checks
+4. Runs tests
+5. Builds package
 
-# Auto-format runs automatically
-# CI/CD runs automatically
-# All checks pass ✓
-# No artifacts stored (unless labeled)
+# No action required from AI!
 ```
 
-### No Action Required!
+### Benefits
 
-Just push your code. The workflows handle everything:
-- ✅ Formatting
-- ✅ Import sorting
-- ✅ Linting
-- ✅ Type checking
-- ✅ Testing
-- ✅ Building
-- 💰 Artifacts only when needed (saves costs)
-
-## For Local Development
-
-### Option 1: Pre-commit Hooks (Recommended)
-
-```bash
-# One-time setup
-poetry run pre-commit install
-
-# Now git commit automatically formats
-git commit -m "feat: new feature"
-# ✓ Black runs
-# ✓ isort runs
-# ✓ flake8 checks
-# ✓ Commit succeeds
-```
-
-### Option 2: Manual Format
-
-```bash
-# Before committing
-poetry run black src/ tests/
-poetry run isort src/ tests/
-
-git add .
-git commit -m "feat: new feature"
-```
-
-### Option 3: Let GitHub Do It
-
-```bash
-# Just push
-git push
-
-# Auto-format workflow fixes it
-# CI/CD runs on formatted code
-```
-
-## Workflow States
-
-### ✅ Success Path
-
-```
-Push → Auto-format (no changes) → CI/CD → All pass ✓ → No artifacts stored
-```
-
-### 🔧 Auto-Fix Path
-
-```
-Push → Auto-format (changes made) → Auto-commit → CI/CD → All pass ✓
-```
-
-### 📦 With Artifacts
-
-```
-Push → Add 'generate-build-artifact' label → CI/CD → Build artifacts stored
-```
-
-### ❌ Failure Path
-
-```
-Push → Auto-format → CI/CD → Tests fail ✗
-```
-
-**Note:** Auto-format only fixes formatting, not logic errors or test failures.
-
-## Performance
-
-### Auto-Format Workflow
-- **Cached:** ~30 seconds
-- **Cold start:** ~60 seconds
-- **Cost:** Minimal (runs on push)
-
-### CI/CD Pipeline
-- **Lint:** ~1-2 minutes
-- **Test:** ~3-5 minutes  
-- **Build:** ~1 minute
-- **Total:** ~5-8 minutes
-- **Cost:** Moderate (only on labeled PRs/main)
-
-### Artifact Storage
-- **With label:** ~5-10MB per PR (7 day retention)
-- **Without label:** $0 storage cost
-- **Savings:** Significant over dozens of PRs
+✅ **Zero config** - Just push code  
+✅ **Auto-fixes formatting** - Don't worry about style  
+✅ **Clear feedback** - Pass/fail status on PR  
+✅ **Production ready** - If pipeline passes, code is good  
 
 ## Troubleshooting
 
-### Auto-format not running?
+### Format job fails
 
-Check:
-1. Workflow file exists: `.github/workflows/auto-format.yml`
-2. Push was to a branch (not tag)
-3. Check Actions tab on GitHub
+**Cause**: Usually syntax errors preventing parsing
 
-### CI/CD not running?
+**Solution**:
+```python
+# Fix syntax errors first
+# Pipeline will format after syntax is valid
+```
 
-Check:
-1. Is this a PR? Does it have `preview-ready` label?
-2. Is this main branch?
-3. Did auto-format complete?
-4. Check Actions tab on GitHub
+### Lint job fails
 
-### Build artifacts not appearing?
+**Cause**: Style issues not auto-fixable
 
-Check:
-1. Does PR have `generate-build-artifact` label?
-2. Did build job complete successfully?
-3. Check "Artifacts" section at bottom of workflow run
+**Common issues**:
+- Unused imports (not removed by isort)
+- Line too long (>100 chars) in comments/strings
+- Type hints missing
 
-### Infinite loop?
+**Solution**: Review flake8/mypy errors and fix manually
 
-Should never happen due to `[skip ci]` in commit message.
-If it does:
-1. Check auto-format commit message includes `[skip ci]`
-2. Check CI workflow respects `[skip ci]`
+### Test job fails
+
+**Cause**: Test failures or missing dependencies
+
+**Solution**: 
+```bash
+# Run tests locally
+poetry run pytest tests/ -v
+
+# Fix failing tests
+# Push changes
+```
+
+### Build job fails
+
+**Cause**: Package configuration issues
+
+**Solution**:
+```bash
+# Test build locally
+poetry build
+
+# Fix pyproject.toml issues
+# Push changes
+```
+
+## Performance
+
+### Typical Times
+
+| Job | Time | Cumulative |
+|-----|------|------------|
+| Format | 30-60s | 1 min |
+| Lint | 1-2 min | 3 min |
+| Test | 3-5 min | 8 min |
+| Build | 1 min | 9 min |
+
+**Total**: ~5-9 minutes for full pipeline
+
+### Optimization
+
+✅ **Cached dependencies** - Poetry venv cached  
+✅ **Parallel where possible** - Multiple test runners  
+✅ **Fail fast** - Lint before expensive tests  
+✅ **Conditional artifacts** - Only upload when labeled  
 
 ## Best Practices
 
 ### For Solo Developer
 
-1. **Install pre-commit hooks locally** (fastest feedback)
-2. **Let auto-format handle remote commits** (AI agents)
-3. **Add `preview-ready` label before review** (runs full CI)
-4. **Only add `generate-build-artifact` when needed** (saves costs)
+1. **Install pre-commit hooks** - Fastest local feedback
+2. **Let pipeline handle remote formatting** - For AI commits
+3. **Review format commits** - Ensure changes are correct
+4. **Only label artifacts when needed** - Save storage
 
 ### For Contributors
 
 1. **Fork and clone**
-2. **Install pre-commit hooks**: `poetry run pre-commit install`
+2. **Install pre-commit**: `poetry run pre-commit install`
 3. **Make changes**
-4. **Commit** (auto-formatted locally)
-5. **Push and create PR**
-6. **Auto-format runs remotely** (backup)
-7. **Add `preview-ready` when ready**
-8. **Add `generate-build-artifact` only if you need the build files**
+4. **Commit** (formats locally if hooks installed)
+5. **Push** (pipeline formats remotely if needed)
+6. **Create PR**
+7. **Pipeline runs automatically**
+8. **Review and merge**
+
+## Migration Notes
+
+### What Changed (Dec 2025)
+
+**Before**: Two separate workflows
+- `auto-format.yml` - Formatted code
+- `ci.yml` - Ran checks (via workflow_run)
+
+**After**: Single unified workflow
+- `.github/workflows/ci.yml` - Does everything
+
+**Benefits**:
+- Simpler architecture
+- No workflow_run complexity
+- Clearer execution order
+- Easier to debug
+- Same SHA across all jobs
+
+### Breaking Changes
+
+None! The pipeline still:
+- Formats code automatically
+- Runs all CI checks
+- Works with PRs and pushes
+- Uploads artifacts when labeled
 
 ## Configuration Files
 
-- `.github/workflows/auto-format.yml` - Auto-format workflow
-- `.github/workflows/ci.yml` - CI/CD pipeline
-- `.pre-commit-config.yaml` - Local pre-commit hooks
-- `pyproject.toml` - Black, isort, mypy config
-- `.flake8` - Flake8 config
+**Workflow**:
+- `.github/workflows/ci.yml` - Main pipeline
+
+**Code Quality**:
+- `pyproject.toml` - Black, isort, pytest config
+- `.flake8` - Flake8 rules
+- `.pre-commit-config.yaml` - Local hooks
 
 ## References
 
 - [GitHub Actions Docs](https://docs.github.com/en/actions)
-- [Pre-commit Framework](https://pre-commit.com/)
+- [Job dependencies](https://docs.github.com/en/actions/using-workflows/advanced-workflow-features#creating-dependent-jobs)
+- [Job outputs](https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idoutputs)
+- [Poetry Documentation](https://python-poetry.org/docs/)
 - [Black Documentation](https://black.readthedocs.io/)
-- [CONTRIBUTING.md](../CONTRIBUTING.md) - Full contribution guide
+- [CONTRIBUTING.md](../CONTRIBUTING.md) - Full guide
