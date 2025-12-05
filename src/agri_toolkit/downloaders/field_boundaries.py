@@ -259,8 +259,7 @@ class FieldBoundaryDownloader(BaseDownloader):
             for region in regions:
                 state_fips.extend(self.REGION_STATE_FIPS[region])
 
-            # Build SQL filters
-            state_filter = ", ".join(["'%s'" % fips for fips in state_fips])
+            # Build crop filter for SQL
             crop_filter = ", ".join(["'%s'" % self.CROP_TYPES[c] for c in crops])
 
             # Construct GeoParquet URL patterns for each state FIPS
@@ -294,7 +293,7 @@ class FieldBoundaryDownloader(BaseDownloader):
             query = (
                 "("
                 + " UNION ALL ".join(select_queries)
-                + f""") 
+                + f""")
             ORDER BY random()
             LIMIT {count}
             """
