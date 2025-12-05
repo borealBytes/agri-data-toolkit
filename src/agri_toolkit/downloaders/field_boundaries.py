@@ -268,12 +268,13 @@ class FieldBoundaryDownloader(BaseDownloader):
             parquet_patterns = []
             for fips in state_fips:
                 parquet_patterns.append(f"{self.SOURCE_COOP_BASE_URL}/state_fips={fips}/*.parquet")
-            
+
             # Combine all patterns with UNION ALL for DuckDB
             # Build individual SELECT queries for each state
             select_queries = []
             for pattern in parquet_patterns:
-                select_queries.append(f"""
+                select_queries.append(
+                    f"""
                 SELECT
                     csb_id as field_id,
                     stateabbr as state,
@@ -286,13 +287,18 @@ class FieldBoundaryDownloader(BaseDownloader):
                 WHERE acres >= {min_acres}
                   AND acres <= {max_acres}
                   AND crop_2023 IN ({crop_filter})
-                """)
-            
+                """
+                )
+
             # Combine with UNION ALL and add ORDER BY + LIMIT
-            query = "(" + " UNION ALL ".join(select_queries) + f""") 
+            query = (
+                "("
+                + " UNION ALL ".join(select_queries)
+                + f""") 
             ORDER BY random()
             LIMIT {count}
             """
+            )
 
             self.logger.debug("Executing DuckDB query: %s", query)
             self.logger.info("Querying Source Cooperative (this may take 10-30 seconds)...")
