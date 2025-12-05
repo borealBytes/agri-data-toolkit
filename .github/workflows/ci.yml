@@ -1,188 +1,256 @@
 name: CI/CD Pipeline
 
+# This workflow auto-formats code, then runs linting, testing, and building
+# All in one sequential pipeline to ensure CI always runs on formatted code
+
 on:
-  # CI runs AFTER auto-format workflow completes successfully
-  # This ensures we always check the formatted code (or original if no changes)
-  workflow_run:
-    workflows: ["Auto Format Code"]
-    types:
-      - completed
+  push:
     branches:
-      - '**'  # Run for all branches
+      - '**'  # Run on all branches
+  pull_request:
+    branches:
+      - main
 
 jobs:
-  # Job 1: Lint first (fastest, cheapest)
-  lint:
-    # Only run if auto-format succeeded (whether it made changes or not)
-    if: github.event.workflow_run.conclusion == 'success'
+  # Job 1: Auto-format code and commit if needed
+  format:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Allow pushing formatting changes
     
+    outputs:
+      formatted_sha: ${{ steps.get-sha.outputs.sha }}
+    
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-3.13-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction --with dev
+
+      - name: Run autopep8 (whitespace cleanup)
+        run: |
+          poetry run autopep8 --in-place --recursive --select=W src/ tests/
+          echo "✅ autopep8 whitespace cleanup complete"
+
+      - name: Run Black formatter
+        run: |
+          poetry run black src/ tests/
+          echo "✅ Black formatting complete"
+
+      - name: Run isort
+        run: |
+          poetry run isort src/ tests/
+          echo "✅ Import sorting complete"
+
+      - name: Check for formatting changes
+        id: verify-changed-files
+        run: |
+          if [[ -z $(git status --porcelain) ]]; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "ℹ️  No formatting changes needed"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "📝 Formatting changes detected:"
+            git status --short
+          fi
+
+      - name: Commit formatting changes
+        if: steps.verify-changed-files.outputs.changed == 'true'
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add -A
+          git commit -m "style: auto-format code with autopep8, Black and isort"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get current SHA for next jobs
+        id: get-sha
+        run: |
+          echo "sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          echo "📍 Current SHA: $(git rev-parse HEAD)"
+
+  # Job 2: Lint (runs on formatted code)
+  lint:
+    needs: format
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        # Check out the branch that triggered auto-format
-        # This gets the latest commit (formatted or original)
-        ref: ${{ github.event.workflow_run.head_branch }}
-    
-    - name: Set up Python 3.13
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.13"
-    
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        version: latest
-        virtualenvs-create: true
-        virtualenvs-in-project: true
-    
-    - name: Load cached venv
-      id: cached-poetry-dependencies
-      uses: actions/cache@v4
-      with:
-        path: .venv
-        key: venv-${{ runner.os }}-3.13-${{ hashFiles('**/poetry.lock') }}
-    
-    - name: Install dependencies
-      run: poetry install --no-interaction --with dev
-    
-    - name: Run code formatting checks
-      run: |
-        poetry run black --check src/ tests/
-        poetry run isort --check-only src/ tests/
-    
-    - name: Run flake8 linting
-      run: poetry run flake8 src/ tests/
-    
-    - name: Run mypy type checking
-      run: poetry run mypy src/ --ignore-missing-imports
+      - name: Check out formatted code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.format.outputs.formatted_sha }}
 
-  # Job 2: Test (run after lint passes)
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-3.13-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction --with dev
+
+      - name: Run Black check
+        run: poetry run black --check src/ tests/
+
+      - name: Run isort check
+        run: poetry run isort --check-only src/ tests/
+
+      - name: Run flake8 linting
+        run: poetry run flake8 src/ tests/
+
+      - name: Run mypy type checking
+        run: poetry run mypy src/ --ignore-missing-imports
+
+  # Job 3: Test (runs after lint passes)
   test:
-    needs: lint
-    if: github.event.workflow_run.conclusion == 'success'
-    
+    needs: [format, lint]
     runs-on: ubuntu-latest
     
     strategy:
       matrix:
-        python-version: ["3.13"]
+        python-version: ['3.13']
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        ref: ${{ github.event.workflow_run.head_branch }}
-    
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
-    
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        version: latest
-        virtualenvs-create: true
-        virtualenvs-in-project: true
-    
-    - name: Load cached venv
-      id: cached-poetry-dependencies
-      uses: actions/cache@v4
-      with:
-        path: .venv
-        key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
-    
-    - name: Install dependencies
-      run: poetry install --no-interaction --with dev
-    
-    - name: Install GDAL system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y gdal-bin libgdal-dev
-    
-    - name: Run tests with coverage
-      run: |
-        poetry run pytest tests/ -v --cov=src/agri_toolkit --cov-report=xml --cov-report=term
-    
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
-      with:
-        file: ./coverage.xml
-        flags: unittests
-        name: codecov-umbrella
-        fail_ci_if_error: false
+      - name: Check out formatted code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.format.outputs.formatted_sha }}
 
-  # Job 3: Build (only if lint and test pass)
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+
+      - name: Install dependencies
+        run: poetry install --no-interaction --with dev
+
+      - name: Install GDAL system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gdal-bin libgdal-dev
+
+      - name: Run tests with coverage
+        run: |
+          poetry run pytest tests/ -v --cov=src/agri_toolkit --cov-report=xml --cov-report=term
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+  # Job 4: Build (runs after lint and test pass)
   build:
-    needs: [lint, test]
-    if: github.event.workflow_run.conclusion == 'success'
-    
+    needs: [format, lint, test]
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        ref: ${{ github.event.workflow_run.head_branch }}
-    
-    - name: Set up Python 3.13
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.13"
-    
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-    
-    - name: Build package
-      run: poetry build
-    
-    # Determine if this is a pull request by checking the head branch
-    - name: Check if PR context
-      id: pr-check
-      run: |
-        # Get PR number if this branch has an open PR
-        PR_NUMBER=$(gh pr list --head ${{ github.event.workflow_run.head_branch }} --json number --jq '.[0].number')
-        if [ -n "$PR_NUMBER" ]; then
-          echo "is_pr=true" >> $GITHUB_OUTPUT
-          echo "pr_number=$PR_NUMBER" >> $GITHUB_OUTPUT
-        else
-          echo "is_pr=false" >> $GITHUB_OUTPUT
-        fi
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    # Only upload artifacts if this is a PR with 'generate-build-artifact' label
-    - name: Check for artifact label
-      if: steps.pr-check.outputs.is_pr == 'true'
-      id: check-label
-      run: |
-        LABELS=$(gh pr view ${{ steps.pr-check.outputs.pr_number }} --json labels --jq '.labels[].name')
-        if echo "$LABELS" | grep -q "generate-build-artifact"; then
-          echo "should_upload=true" >> $GITHUB_OUTPUT
-        else
-          echo "should_upload=false" >> $GITHUB_OUTPUT
-        fi
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Store build artifacts
-      if: steps.pr-check.outputs.is_pr == 'true' && steps.check-label.outputs.should_upload == 'true'
-      uses: actions/upload-artifact@v4
-      with:
-        name: dist-packages
-        path: dist/
-        retention-days: 7
-    
-    - name: Build summary
-      run: |
-        echo "✅ Build completed successfully"
-        if [ "${{ steps.pr-check.outputs.is_pr }}" == "true" ]; then
-          if [ "${{ steps.check-label.outputs.should_upload }}" == "true" ]; then
-            echo "📦 Artifacts uploaded (generate-build-artifact label present)"
+      - name: Check out formatted code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.format.outputs.formatted_sha }}
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Build package
+        run: poetry build
+
+      - name: Check if PR and has artifact label
+        id: check-upload
+        if: github.event_name == 'pull_request'
+        run: |
+          LABELS=$(gh pr view ${{ github.event.pull_request.number }} --json labels --jq '.labels[].name')
+          if echo "$LABELS" | grep -q "generate-build-artifact"; then
+            echo "should_upload=true" >> $GITHUB_OUTPUT
           else
-            echo "ℹ️  Artifacts not stored (add 'generate-build-artifact' label to store)"
+            echo "should_upload=false" >> $GITHUB_OUTPUT
           fi
-        fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload build artifacts
+        if: github.event_name == 'pull_request' && steps.check-upload.outputs.should_upload == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-packages
+          path: dist/
+          retention-days: 7
+
+      - name: Build summary
+        run: |
+          echo "✅ Build completed successfully"
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            if [ "${{ steps.check-upload.outputs.should_upload }}" == "true" ]; then
+              echo "📦 Artifacts uploaded (generate-build-artifact label present)"
+            else
+              echo "ℹ️  Artifacts not stored (add 'generate-build-artifact' label to store)"
+            fi
+          fi
