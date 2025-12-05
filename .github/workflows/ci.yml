@@ -144,6 +144,9 @@ jobs:
   test:
     needs: [format, lint]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write  # Allow posting comments
     
     strategy:
       matrix:
@@ -183,16 +186,184 @@ jobs:
           sudo apt-get install -y gdal-bin libgdal-dev
 
       - name: Run tests with coverage
+        id: pytest
+        continue-on-error: true
         run: |
           poetry run pytest tests/ -v --cov=src/agri_toolkit --cov-report=xml --cov-report=term
 
       - name: Upload coverage to Codecov
+        if: steps.pytest.outcome == 'success'
         uses: codecov/codecov-action@v4
         with:
           file: ./coverage.xml
           flags: unittests
           name: codecov-umbrella
           fail_ci_if_error: false
+
+      - name: Generate test data visualization map
+        if: github.event_name == 'pull_request'
+        id: generate-map
+        continue-on-error: true
+        run: |
+          # Find the test GeoJSON file
+          GEOJSON_FILE=$(find data/raw/field_boundaries -name "*.geojson" -type f | head -n 1)
+          
+          if [ -z "$GEOJSON_FILE" ]; then
+            echo "status=no_data" >> $GITHUB_OUTPUT
+            echo "⚠️  No test data found"
+            exit 0
+          fi
+          
+          echo "Found test data: $GEOJSON_FILE"
+          
+          # Generate map
+          mkdir -p test_artifacts
+          python scripts/generate_test_map.py "$GEOJSON_FILE" test_artifacts/test_data_map.html
+          
+          if [ -f test_artifacts/test_data_map.html ]; then
+            echo "status=success" >> $GITHUB_OUTPUT
+            echo "map_path=test_artifacts/test_data_map.html" >> $GITHUB_OUTPUT
+            echo "✅ Map generated successfully"
+          else
+            echo "status=failed" >> $GITHUB_OUTPUT
+            echo "❌ Map generation failed"
+          fi
+
+      - name: Upload test data map as artifact
+        if: github.event_name == 'pull_request' && steps.generate-map.outputs.status == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-data-map-py${{ matrix.python-version }}
+          path: test_artifacts/test_data_map.html
+          retention-days: 7
+
+      - name: Create or update PR comment with map
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+          MAP_STATUS: ${{ steps.generate-map.outputs.status }}
+          TEST_STATUS: ${{ steps.pytest.outcome }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const pythonVersion = process.env.PYTHON_VERSION;
+            const mapStatus = process.env.MAP_STATUS;
+            const testStatus = process.env.TEST_STATUS;
+            
+            // Comment marker for identifying our comment
+            const commentMarker = `<!-- test-data-preview-py${pythonVersion} -->`;
+            
+            let commentBody;
+            
+            if (testStatus !== 'success') {
+              // Tests failed
+              commentBody = `${commentMarker}
+## ❌ Test Data Preview (Python ${pythonVersion})
+
+**Tests Failed** - Unable to generate test data visualization.
+
+Please check the test logs for details.
+
+---
+*Last updated: ${new Date().toISOString()}*
+`;
+            } else if (mapStatus === 'no_data') {
+              // No test data found
+              commentBody = `${commentMarker}
+## ⚠️ Test Data Preview (Python ${pythonVersion})
+
+**No Test Data Found** - Tests passed but no field boundary data was generated.
+
+This may be expected if tests don't download actual data.
+
+---
+*Last updated: ${new Date().toISOString()}*
+`;
+            } else if (mapStatus === 'success') {
+              // Map generated successfully
+              const runId = context.runId;
+              const mapUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${runId}`;
+              
+              commentBody = `${commentMarker}
+## ✅ Test Data Preview (Python ${pythonVersion})
+
+**Tests Passed** - Field boundary data downloaded and visualized successfully!
+
+### 🗺️ Interactive Map
+
+📦 **Download the interactive map:**
+1. Go to the [workflow run artifacts](${mapUrl})
+2. Download **test-data-map-py${pythonVersion}.zip**
+3. Extract and open **test_data_map.html** in your browser
+
+### 🌾 Features
+
+- **Base Maps**: Choose from OpenStreetMap, Satellite, Terrain, or Topo
+- **Field Selection**: Dropdown to zoom to specific fields
+- **Field Details**: Click any field to see metadata (ID, state, county, crop, acreage)
+- **Self-Contained**: No server required, works offline
+
+### 📊 Test Summary
+
+- **Python Version**: ${pythonVersion}
+- **Test Status**: ✅ All tests passed
+- **Data Source**: USDA Crop Sequence Boundaries (Source Cooperative)
+- **Map Generated**: Yes
+
+---
+*Last updated: ${new Date().toISOString()}*
+*This comment auto-updates on each CI/CD run*
+`;
+            } else {
+              // Map generation failed
+              commentBody = `${commentMarker}
+## ⚠️ Test Data Preview (Python ${pythonVersion})
+
+**Map Generation Failed** - Tests passed but map generation encountered an error.
+
+Check the workflow logs for details.
+
+---
+*Last updated: ${new Date().toISOString()}*
+`;
+            }
+            
+            // Find existing comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const existingComment = comments.find(comment => 
+              comment.body.includes(commentMarker)
+            );
+            
+            if (existingComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: commentBody
+              });
+              console.log('Updated existing comment');
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: commentBody
+              });
+              console.log('Created new comment');
+            }
+
+      - name: Fail if tests failed
+        if: steps.pytest.outcome != 'success'
+        run: exit 1
 
   # Job 4: Build (runs after lint and test pass)
   build:
