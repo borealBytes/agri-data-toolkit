@@ -61,7 +61,8 @@ class FieldBoundaryDownloader(BaseDownloader):
     """
 
     # Source Cooperative base URL for USDA CSB GeoParquet data
-    SOURCE_COOP_BASE_URL = "https://data.source.coop/fiboa/us-usda-cropland"
+    # Updated to correct path: fiboa/us-usda-csb (not us-usda-cropland)
+    SOURCE_COOP_BASE_URL = "https://data.source.coop/fiboa/us-usda-csb"
 
     # Mapping of regions to state FIPS codes
     REGION_STATE_FIPS = {
