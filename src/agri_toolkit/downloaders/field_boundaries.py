@@ -62,7 +62,9 @@ class FieldBoundaryDownloader(BaseDownloader):
 
     # Source Cooperative URL for USDA CSB GeoParquet data
     # Actual filename is us_usda_cropland.parquet (verified at source.coop)
-    SOURCE_COOP_BASE_URL = "https://data.source.coop/fiboa/us-usda-cropland/us_usda_cropland.parquet"
+    SOURCE_COOP_BASE_URL = (
+        "https://data.source.coop/fiboa/us-usda-cropland/us_usda_cropland.parquet"
+    )
 
     # Mapping of regions to state FIPS codes
     REGION_STATE_FIPS = {
