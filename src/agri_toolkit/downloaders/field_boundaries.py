@@ -60,9 +60,9 @@ class FieldBoundaryDownloader(BaseDownloader):
         reducing bandwidth and processing time.
     """
 
-    # Source Cooperative base URL for USDA CSB GeoParquet data
-    # Data is stored as data.parquet (fiboa standard naming convention)
-    SOURCE_COOP_BASE_URL = "https://data.source.coop/fiboa/us-usda-cropland/data.parquet"
+    # Source Cooperative URL for USDA CSB GeoParquet data
+    # Actual filename is us_usda_cropland.parquet (verified at source.coop)
+    SOURCE_COOP_BASE_URL = "https://data.source.coop/fiboa/us-usda-cropland/us_usda_cropland.parquet"
 
     # Mapping of regions to state FIPS codes
     REGION_STATE_FIPS = {
@@ -268,8 +268,8 @@ class FieldBoundaryDownloader(BaseDownloader):
             # Build crop filter for SQL
             crop_filter = ", ".join(["'%s'" % self.CROP_TYPES[c] for c in crops])
 
-            # Use single consolidated parquet file (fiboa standard: data.parquet)
-            # DuckDB will efficiently fetch only the needed data via HTTP range requests
+            # Use actual parquet filename from Source Cooperative
+            # Filename is us_usda_cropland.parquet (verified at source.coop)
             parquet_url = self.SOURCE_COOP_BASE_URL
 
             # Build DuckDB query with filters
