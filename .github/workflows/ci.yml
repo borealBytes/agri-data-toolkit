@@ -2,11 +2,9 @@ name: CI/CD Pipeline
 
 # This workflow auto-formats code, then runs linting, testing, and building
 # All in one sequential pipeline to ensure CI always runs on formatted code
+# Runs only on pull requests to avoid duplicate runs
 
 on:
-  push:
-    branches:
-      - '**'  # Run on all branches
   pull_request:
     branches:
       - main
@@ -201,7 +199,6 @@ jobs:
           fail_ci_if_error: false
 
       - name: Generate test data visualization map
-        if: github.event_name == 'pull_request'
         id: generate-map
         continue-on-error: true
         run: |
@@ -230,7 +227,7 @@ jobs:
           fi
 
       - name: Upload test data map as artifact
-        if: github.event_name == 'pull_request' && steps.generate-map.outputs.status == 'success'
+        if: steps.generate-map.outputs.status == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: test-data-map-py${{ matrix.python-version }}
@@ -238,7 +235,6 @@ jobs:
           retention-days: 7
 
       - name: Create or update PR comment with map
-        if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         env:
           PYTHON_VERSION: ${{ matrix.python-version }}
@@ -396,7 +392,6 @@ jobs:
 
       - name: Check if PR and has artifact label
         id: check-upload
-        if: github.event_name == 'pull_request'
         run: |
           LABELS=$(gh pr view ${{ github.event.pull_request.number }} --json labels --jq '.labels[].name')
           if echo "$LABELS" | grep -q "generate-build-artifact"; then
@@ -408,7 +403,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload build artifacts
-        if: github.event_name == 'pull_request' && steps.check-upload.outputs.should_upload == 'true'
+        if: steps.check-upload.outputs.should_upload == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: dist-packages
@@ -418,10 +413,8 @@ jobs:
       - name: Build summary
         run: |
           echo "✅ Build completed successfully"
-          if [ "${{ github.event_name }}" == "pull_request" ]; then
-            if [ "${{ steps.check-upload.outputs.should_upload }}" == "true" ]; then
-              echo "📦 Artifacts uploaded (generate-build-artifact label present)"
-            else
-              echo "ℹ️  Artifacts not stored (add 'generate-build-artifact' label to store)"
-            fi
+          if [ "${{ steps.check-upload.outputs.should_upload }}" == "true" ]; then
+            echo "📦 Artifacts uploaded (generate-build-artifact label present)"
+          else
+            echo "ℹ️  Artifacts not stored (add 'generate-build-artifact' label to store)"
           fi
