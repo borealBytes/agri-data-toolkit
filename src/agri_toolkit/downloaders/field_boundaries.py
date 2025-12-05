@@ -61,8 +61,8 @@ class FieldBoundaryDownloader(BaseDownloader):
     """
 
     # Source Cooperative base URL for USDA CSB GeoParquet data
-    # Data is organized with hive partitioning: state_fips=XX/*.parquet
-    SOURCE_COOP_BASE_URL = "https://data.source.coop/fiboa/us-usda-cropland"
+    # Data is stored as a single consolidated parquet file
+    SOURCE_COOP_BASE_URL = "https://data.source.coop/fiboa/us-usda-cropland/csb.parquet"
 
     # Mapping of regions to state FIPS codes
     REGION_STATE_FIPS = {
@@ -237,6 +237,9 @@ class FieldBoundaryDownloader(BaseDownloader):
         GeoParquet files with server-side filtering. Only downloads
         the filtered subset, not the entire dataset.
 
+        DuckDB uses HTTP range requests to fetch only the needed row groups
+        and columns, making this very efficient even for large datasets.
+
         Args:
             count: Number of fields to retrieve.
             regions: List of region names.
@@ -259,45 +262,35 @@ class FieldBoundaryDownloader(BaseDownloader):
             for region in regions:
                 state_fips.extend(self.REGION_STATE_FIPS[region])
 
+            # Build state filter for SQL
+            state_filter = ", ".join(["'%s'" % fips for fips in state_fips])
+
             # Build crop filter for SQL
             crop_filter = ", ".join(["'%s'" % self.CROP_TYPES[c] for c in crops])
 
-            # Construct GeoParquet URL patterns for each state FIPS
-            # Source Cooperative uses hive partitioning: state_fips=XX/*.parquet
-            parquet_patterns = []
-            for fips in state_fips:
-                parquet_patterns.append(f"{self.SOURCE_COOP_BASE_URL}/state_fips={fips}/*.parquet")
+            # Use single consolidated parquet file
+            # DuckDB will efficiently fetch only the needed data via HTTP range requests
+            parquet_url = self.SOURCE_COOP_BASE_URL
 
-            # Combine all patterns with UNION ALL for DuckDB
-            # Build individual SELECT queries for each state
-            select_queries = []
-            for pattern in parquet_patterns:
-                select_queries.append(
-                    f"""
-                SELECT
-                    csb_id as field_id,
-                    stateabbr as state,
-                    ctyname as county,
-                    acres as area_acres,
-                    crop_2023,
-                    geometry,
-                    state_fips
-                FROM read_parquet('{pattern}', hive_partitioning=1)
-                WHERE acres >= {min_acres}
-                  AND acres <= {max_acres}
-                  AND crop_2023 IN ({crop_filter})
-                """
-                )
-
-            # Combine with UNION ALL and add ORDER BY + LIMIT
-            query = (
-                "("
-                + " UNION ALL ".join(select_queries)
-                + f""")
+            # Build DuckDB query with filters
+            # DuckDB pushes down these filters for efficient remote querying
+            query = f"""
+            SELECT
+                csb_id as field_id,
+                stateabbr as state,
+                ctyname as county,
+                acres as area_acres,
+                crop_2023,
+                geometry,
+                state_fips
+            FROM read_parquet('{parquet_url}')
+            WHERE state_fips IN ({state_filter})
+              AND acres >= {min_acres}
+              AND acres <= {max_acres}
+              AND crop_2023 IN ({crop_filter})
             ORDER BY random()
             LIMIT {count}
             """
-            )
 
             self.logger.debug("Executing DuckDB query: %s", query)
             self.logger.info("Querying Source Cooperative (this may take 10-30 seconds)...")
