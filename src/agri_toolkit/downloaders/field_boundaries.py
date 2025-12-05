@@ -67,6 +67,7 @@ class FieldBoundaryDownloader(BaseDownloader):
     )
 
     # Mapping of regions to state FIPS codes
+    # fiboa uses administrative_area_level_2 for state FIPS codes
     REGION_STATE_FIPS = {
         "corn_belt": ["17", "19", "18", "39", "27"],  # IL, IA, IN, OH, MN
         "great_plains": ["20", "31", "46", "38", "48"],  # KS, NE, SD, ND, TX
@@ -267,7 +268,7 @@ class FieldBoundaryDownloader(BaseDownloader):
             # Build state filter for SQL
             state_filter = ", ".join(["'%s'" % fips for fips in state_fips])
 
-            # Build crop filter for SQL
+            # Build crop filter for SQL  
             crop_filter = ", ".join(["'%s'" % self.CROP_TYPES[c] for c in crops])
 
             # Use actual parquet filename from Source Cooperative
@@ -276,6 +277,7 @@ class FieldBoundaryDownloader(BaseDownloader):
 
             # Build DuckDB query with filters
             # DuckDB pushes down these filters for efficient remote querying
+            # Note: fiboa uses 'administrative_area_level_2' for state FIPS codes
             query = f"""
             SELECT
                 csb_id as field_id,
@@ -284,9 +286,9 @@ class FieldBoundaryDownloader(BaseDownloader):
                 acres as area_acres,
                 crop_2023,
                 geometry,
-                state_fips
+                administrative_area_level_2 as state_fips
             FROM read_parquet('{parquet_url}')
-            WHERE state_fips IN ({state_filter})
+            WHERE administrative_area_level_2 IN ({state_filter})
               AND acres >= {min_acres}
               AND acres <= {max_acres}
               AND crop_2023 IN ({crop_filter})
