@@ -84,15 +84,21 @@ class FieldBoundaryDownloader(BaseDownloader):
         "cotton": ["2"],  # Cotton
     }
 
-    def __init__(self, config: Optional[Config] = None) -> None:
+    def __init__(
+        self, config: Optional[Config] = None, data_source_url: Optional[str] = None
+    ) -> None:
         """Initialize field boundary downloader.
 
         Args:
             config: Configuration object. If None, uses default config.
+            data_source_url: Optional URL override for testing.
+                If None, uses live Source Cooperative endpoint.
         """
         super().__init__(config)
         self.output_subdir = "field_boundaries"
         self._duckdb_conn: Optional[duckdb.DuckDBPyConnection] = None
+        # Allow URL override for testing
+        self.data_source_url = data_source_url or self.SOURCE_COOP_BASE_URL
 
     def _get_duckdb_connection(self) -> duckdb.DuckDBPyConnection:
         """Get or create DuckDB connection with spatial extension.
@@ -269,7 +275,8 @@ class FieldBoundaryDownloader(BaseDownloader):
 
             # Use actual parquet filename from Source Cooperative
             # Filename is us_usda_cropland.parquet (verified at source.coop)
-            parquet_url = self.SOURCE_COOP_BASE_URL
+            # Or use injected URL for testing
+            parquet_url = self.data_source_url
 
             # Build DuckDB query
             # DuckDB pushes down filters for efficient remote querying

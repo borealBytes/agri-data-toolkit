@@ -39,6 +39,7 @@ colorama = "^0.4.6"
 loguru = "^0.7.0"
 sentinelsat = "^1.2.0"
 duckdb = "^1.1.0"
+pyarrow = "^22.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.0"
@@ -93,6 +94,11 @@ python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
 addopts = "-v --cov=src/agri_toolkit --cov-report=html --cov-report=term"
+markers = [
+    "unit: Unit tests using local fixtures",
+    "integration: Integration tests hitting live endpoints",
+    "slow: Tests that take longer than 5 seconds",
+]
 
 [tool.mypy]
 python_version = "3.12"

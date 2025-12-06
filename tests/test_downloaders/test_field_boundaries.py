@@ -18,8 +18,8 @@ from agri_toolkit.core.config import Config
 from agri_toolkit.downloaders.field_boundaries import FieldBoundaryDownloader
 
 
-class TestFieldBoundaryDownloader:
-    """Test suite for FieldBoundaryDownloader.
+class TestFieldBoundaryDownloaderIntegration:
+    """Integration test suite for FieldBoundaryDownloader.
 
     Note: These tests make real HTTP requests to Source Cooperative.
     Download counts are kept minimal (2-10 fields) to:
@@ -29,15 +29,17 @@ class TestFieldBoundaryDownloader:
     """
 
     @pytest.fixture
-    def downloader(self, tmp_path):
-        """Create downloader instance with temporary output directory."""
+    def downloader(self, tmp_path, sample_field_boundaries_parquet):
+        """Create downloader instance with temporary output directory using local sample data."""
         # Create a temporary config
         config = Config()
         # Override paths to use tmp_path
         config._config["paths"]["raw"] = str(tmp_path / "raw")
         config._config["paths"]["processed"] = str(tmp_path / "processed")
 
-        return FieldBoundaryDownloader(config=config)
+        return FieldBoundaryDownloader(
+            config=config, data_source_url=str(sample_field_boundaries_parquet)
+        )
 
     def test_download_minimum_fields(self, downloader):
         """Test downloading minimum number of fields from real data.
@@ -197,7 +199,8 @@ class TestFieldBoundaryDownloader:
         with pytest.raises(ValueError, match="Unsupported output format"):
             downloader.download(count=2, regions=["corn_belt"], output_format="invalid")
 
-    def test_download_real_data_structure(self, downloader):
+    @pytest.mark.integration
+    def test_download_real_data_structure(self, tmp_path):
         """Integration test: Verify complete data structure from Source Cooperative.
 
         This test validates that we're getting properly structured real data
@@ -205,6 +208,13 @@ class TestFieldBoundaryDownloader:
 
         NOTE: Crop filter assertions temporarily removed while debugging actual crop_code format.
         """
+        # Create a fresh downloader that hits the live API (no data_source_url override)
+        config = Config()
+        config._config["paths"]["raw"] = str(tmp_path / "raw")
+        config._config["paths"]["processed"] = str(tmp_path / "processed")
+
+        downloader = FieldBoundaryDownloader(config=config)
+
         fields = downloader.download(count=5, regions=["corn_belt"], crops=["corn", "soybeans"])
 
         # Should get exactly 5 fields
