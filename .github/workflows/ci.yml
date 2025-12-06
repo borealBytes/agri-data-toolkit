@@ -185,6 +185,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gdal-bin libgdal-dev
 
+      - name: Generate sample data for tests
+        run: poetry run python scripts/generate_sample_field_boundaries.py
+
       - name: Run tests with coverage
         id: pytest
         continue-on-error: true
