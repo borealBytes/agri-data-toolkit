@@ -15,8 +15,8 @@ Coverage:
 
 Attributes:
     - Field ID (fiboa 'id'), administrative area (state FIPS)
-    - Area in hectares (fiboa 'area')
-    - Crop type codes (fiboa 'crop:code' - CDL codes)
+    - Crop type codes (fiboa 'crop:code_list' - CDL codes)
+    - Crop name (fiboa 'crop:name')
     - Geometry (polygon boundaries in EPSG:4326)
 
 Citation:
@@ -114,8 +114,8 @@ class FieldBoundaryDownloader(BaseDownloader):
         """Download field boundaries from Source Cooperative.
 
         This method queries the USDA Crop Sequence Boundaries dataset
-        hosted on Source Cooperative, filtering by region, crop type,
-        and field size. It uses DuckDB for efficient server-side filtering,
+        hosted on Source Cooperative, filtering by region and crop type.
+        It uses DuckDB for efficient server-side filtering,
         downloading only the requested subset of data.
 
         Args:
@@ -128,10 +128,6 @@ class FieldBoundaryDownloader(BaseDownloader):
                 crops (Optional[List[str]]): Crop types to include.
                     Options: 'corn', 'soybeans', 'wheat', 'cotton'
                     Default: ['corn', 'soybeans']
-                min_acres (float): Minimum field size in acres (default: 40).
-                    Filters out very small fields.
-                max_acres (float): Maximum field size in acres (default: 500).
-                    Filters out unusually large polygons.
                 output_format (str): Output file format.
                     Options: 'geojson', 'shapefile'
                     Default: 'geojson'
@@ -141,8 +137,8 @@ class FieldBoundaryDownloader(BaseDownloader):
                 - field_id: Unique identifier (fiboa ID)
                 - region: Region name (corn_belt, great_plains, southeast)
                 - state_fips: State FIPS code
-                - area_acres: Field size in acres (converted from hectares)
-                - crop_code: Crop type code (CDL code)
+                - area_acres: Field size in acres (calculated from geometry)
+                - crop_code_list: Crop type codes (CDL codes)
                 - crop_name: Crop name
                 - geometry: Polygon geometry (EPSG:4326)
 
@@ -165,8 +161,6 @@ class FieldBoundaryDownloader(BaseDownloader):
         count: int = kwargs.get("count", 200)
         regions: Optional[List[str]] = kwargs.get("regions", None)
         crops: Optional[List[str]] = kwargs.get("crops", None)
-        min_acres: float = kwargs.get("min_acres", 40.0)
-        max_acres: float = kwargs.get("max_acres", 500.0)
         output_format: str = kwargs.get("output_format", "geojson")
 
         self.logger.info(
@@ -206,15 +200,12 @@ class FieldBoundaryDownloader(BaseDownloader):
 
         self.logger.info("Regions: %s", regions)
         self.logger.info("Crops: %s", crops)
-        self.logger.info("Size filter: %s-%s acres", min_acres, max_acres)
 
         # Query CSB data from Source Cooperative
         fields_gdf = self._query_source_cooperative(
             count=count,
             regions=regions,
             crops=crops,
-            min_acres=min_acres,
-            max_acres=max_acres,
         )
 
         # Validate downloaded data
@@ -232,8 +223,6 @@ class FieldBoundaryDownloader(BaseDownloader):
         count: int,
         regions: List[str],
         crops: List[str],
-        min_acres: float,
-        max_acres: float,
     ) -> gpd.GeoDataFrame:
         """Query USDA CSB data from Source Cooperative using DuckDB.
 
@@ -248,8 +237,6 @@ class FieldBoundaryDownloader(BaseDownloader):
             count: Number of fields to retrieve.
             regions: List of region names.
             crops: List of crop types.
-            min_acres: Minimum field size.
-            max_acres: Maximum field size.
 
         Returns:
             GeoDataFrame with downloaded field boundaries.
@@ -273,39 +260,35 @@ class FieldBoundaryDownloader(BaseDownloader):
             crop_codes = []
             for crop in crops:
                 crop_codes.extend(self.CROP_TYPES[crop])
-            crop_filter = ", ".join(["'%s'" % code for code in crop_codes])
+            crop_filter = ", ".join(["%s" % code for code in crop_codes])
 
             # Use actual parquet filename from Source Cooperative
             # Filename is us_usda_cropland.parquet (verified at source.coop)
             parquet_url = self.SOURCE_COOP_BASE_URL
 
-            # Convert acres to hectares for fiboa 'area' field
-            # 1 acre = 0.404686 hectares
-            min_hectares = min_acres * 0.404686
-            max_hectares = max_acres * 0.404686
-
             # Build DuckDB query with filters
             # DuckDB pushes down these filters for efficient remote querying
             # Note: fiboa schema uses:
             #   - 'administrative_area_level_2' for state FIPS codes
-            #   - 'area' for field size in hectares
-            #   - 'crop:code' for crop type (CDL code) - note the colon!
+            #   - 'crop:code_list' for crop codes (string with comma-separated CDL codes)
             #   - 'crop:name' for crop name
             #   - 'id' for unique field identifier
             # Column names with special chars need double quotes in DuckDB
+            # 
+            # crop:code_list contains strings like "1,1,1,1,1,1,1,1" (8 years of crop codes)
+            # We check if any of our target crop codes appear in this list
             query = f"""
             SELECT
                 id as field_id,
                 administrative_area_level_2 as state_fips,
-                area as area_ha,
-                "crop:code" as crop_code,
+                "crop:code_list" as crop_code_list,
                 "crop:name" as crop_name,
                 geometry
             FROM read_parquet('{parquet_url}')
             WHERE administrative_area_level_2 IN ({state_filter})
-              AND area >= {min_hectares}
-              AND area <= {max_hectares}
-              AND "crop:code" IN ({crop_filter})
+              AND (
+                {' OR '.join([f'"crop:code_list" LIKE \'%{code}%\'' for code in crop_codes])}
+              )
             ORDER BY random()
             LIMIT {count}
             """
@@ -319,7 +302,7 @@ class FieldBoundaryDownloader(BaseDownloader):
             if len(result_df) == 0:
                 raise RuntimeError(
                     "No fields found matching criteria. "
-                    "Try different regions/crops or adjust size filters."
+                    "Try different regions/crops or adjust filters."
                 )
 
             self.logger.info("Retrieved %d fields from Source Cooperative", len(result_df))
@@ -328,10 +311,13 @@ class FieldBoundaryDownloader(BaseDownloader):
             # DuckDB spatial extension returns geometry as WKB binary
             gdf = gpd.GeoDataFrame(result_df, geometry="geometry", crs="EPSG:4326")
 
-            # Convert area from hectares to acres for user convenience
-            # 1 hectare = 2.47105 acres
-            gdf["area_acres"] = gdf["area_ha"] * 2.47105
-            gdf = gdf.drop(columns=["area_ha"])
+            # Calculate area from geometry
+            # Need to project to equal-area coordinate system for accurate area calculation
+            # EPSG:5070 is Albers Equal Area (used by USDA for cropland data)
+            gdf_projected = gdf.to_crs("EPSG:5070")
+            # Calculate area in square meters, convert to acres
+            # 1 acre = 4046.86 square meters
+            gdf["area_acres"] = gdf_projected.geometry.area / 4046.86
 
             # Add region mapping back to data
             # Map state FIPS to region for user convenience
@@ -354,7 +340,7 @@ class FieldBoundaryDownloader(BaseDownloader):
                 "region",
                 "state_fips",
                 "area_acres",
-                "crop_code",
+                "crop_code_list",
                 "crop_name",
                 "geometry",
             ]
