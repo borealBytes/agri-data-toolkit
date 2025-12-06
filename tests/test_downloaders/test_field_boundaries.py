@@ -68,14 +68,14 @@ class TestFieldBoundaryDownloader:
         """Test that fields have all required attributes from Source Cooperative."""
         fields = downloader.download(count=2, regions=["corn_belt"])
 
-        # Required columns from CSB dataset
+        # Required columns from fiboa CSB dataset
         required_columns = [
-            "field_id",  # CSB ID
+            "field_id",  # fiboa ID
             "region",  # Our region mapping
-            "state",  # State abbreviation
-            "county",  # County name
-            "area_acres",  # Field size
-            "crop_2023",  # 2023 crop type
+            "state_fips",  # State FIPS code (fiboa: administrative_area_level_2)
+            "area_acres",  # Field size (converted from hectares)
+            "crop_code",  # CDL crop code (fiboa: crop:code)
+            "crop_name",  # Crop name (fiboa: crop:name)
             "geometry",  # Polygon geometry
         ]
 
@@ -108,10 +108,11 @@ class TestFieldBoundaryDownloader:
         """Test crop type filtering works correctly."""
         fields = downloader.download(count=2, regions=["corn_belt"], crops=["corn", "soybeans"])
 
-        # All fields should have crop_2023 in requested types
+        # All fields should have crop_code in requested types (CDL codes: 1=corn, 5=soybeans)
+        valid_crop_codes = ["1", "5"]  # CDL codes for corn and soybeans
         assert all(
-            crop in ["corn", "soybeans"] for crop in fields["crop_2023"]
-        ), "Fields should only contain requested crop types"
+            code in valid_crop_codes for code in fields["crop_code"]
+        ), "Fields should only contain requested crop types (CDL codes 1 or 5)"
 
     def test_download_filters_by_size(self, downloader):
         """Test field size filtering works correctly."""
@@ -210,7 +211,7 @@ class TestFieldBoundaryDownloader:
         """Integration test: Verify complete data structure from Source Cooperative.
 
         This test validates that we're getting properly structured real data
-        from the USDA Crop Sequence Boundaries dataset.
+        from the USDA Crop Sequence Boundaries dataset in fiboa format.
         """
         fields = downloader.download(count=5, regions=["corn_belt"], crops=["corn", "soybeans"])
 
@@ -221,10 +222,10 @@ class TestFieldBoundaryDownloader:
         expected_cols = [
             "field_id",
             "region",
-            "state",
-            "county",
+            "state_fips",
             "area_acres",
-            "crop_2023",
+            "crop_code",
+            "crop_name",
             "geometry",
         ]
         for col in expected_cols:
@@ -233,6 +234,7 @@ class TestFieldBoundaryDownloader:
         # Verify data types
         assert fields["field_id"].dtype == "object"  # String field IDs
         assert fields["area_acres"].dtype in ["float64", "float32"]  # Numeric acres
+        assert fields["crop_code"].dtype == "object"  # String crop codes (CDL codes)
 
         # Verify geometries are valid
         assert fields.geometry.is_valid.all()
@@ -240,13 +242,19 @@ class TestFieldBoundaryDownloader:
         # Verify CRS
         assert fields.crs.to_string() == "EPSG:4326"
 
-        # Verify fields are within corn belt states
-        corn_belt_states = ["IL", "IA", "IN", "OH", "MN"]
+        # Verify fields are within corn belt states (FIPS codes)
+        corn_belt_fips = ["17", "19", "18", "39", "27"]  # IL, IA, IN, OH, MN
         assert all(
-            state in corn_belt_states for state in fields["state"]
+            fips in corn_belt_fips for fips in fields["state_fips"]
         ), "All fields should be in corn belt states"
 
         # Verify reasonable field sizes (40-500 acres is our default range)
         assert all(
             40 <= acres <= 500 for acres in fields["area_acres"]
         ), "Field sizes should be within expected range"
+
+        # Verify crop codes are correct (1=corn, 5=soybeans)
+        valid_crop_codes = ["1", "5"]
+        assert all(
+            code in valid_crop_codes for code in fields["crop_code"]
+        ), "Crop codes should be 1 (corn) or 5 (soybeans)"
