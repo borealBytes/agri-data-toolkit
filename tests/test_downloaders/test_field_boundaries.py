@@ -112,9 +112,9 @@ class TestFieldBoundaryDownloader:
         # CDL codes: 1=corn, 5=soybeans
         # crop_code_list contains strings like "1,1,1,1,1,1,1,1" (historical crop sequence)
         for crop_code_list in fields["crop_code_list"]:
-            assert "1" in crop_code_list or "5" in crop_code_list, (
-                f"crop_code_list '{crop_code_list}' should contain '1' (corn) or '5' (soybeans)"
-            )
+            assert (
+                "1" in crop_code_list or "5" in crop_code_list
+            ), f"crop_code_list '{crop_code_list}' should contain '1' (corn) or '5' (soybeans)"
 
     def test_download_saves_to_file(self, downloader, tmp_path):
         """Test that download saves fields to file."""
@@ -238,9 +238,11 @@ class TestFieldBoundaryDownloader:
 
         # Verify crop_code_list contains corn (1) or soybeans (5)
         for crop_code_list in fields["crop_code_list"]:
-            assert "1" in crop_code_list or "5" in crop_code_list, (
-                f"crop_code_list should contain '1' (corn) or '5' (soybeans), got: {crop_code_list}"
-            )
+            assert (
+                "1" in crop_code_list or "5" in crop_code_list
+            ), f"crop_code_list should contain '1' (corn) or '5' (soybeans), got: {crop_code_list}"
 
         # Verify area_acres are positive and reasonable
-        assert all(acres > 0 for acres in fields["area_acres"]), "All field sizes should be positive"
+        assert all(
+            acres > 0 for acres in fields["area_acres"]
+        ), "All field sizes should be positive"
