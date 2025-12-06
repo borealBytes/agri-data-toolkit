@@ -274,7 +274,7 @@ class FieldBoundaryDownloader(BaseDownloader):
             #   - 'crop:name' for crop name
             #   - 'id' for unique field identifier
             # Column names with special chars need double quotes in DuckDB
-            # 
+            #
             # crop:code_list contains strings like "1,1,1,1,1,1,1,1" (8 years of crop codes)
             # We check if any of our target crop codes appear in this list
             query = f"""
