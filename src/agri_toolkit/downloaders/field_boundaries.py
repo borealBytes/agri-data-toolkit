@@ -311,7 +311,9 @@ class FieldBoundaryDownloader(BaseDownloader):
                 self.logger.info("Sample crop codes from data:")
                 sample_codes = result_df["crop_code"].head(5).tolist()
                 for i, code in enumerate(sample_codes):
-                    self.logger.info("  Row %d: crop_code=%s (type=%s)", i, code, type(code).__name__)
+                    self.logger.info(
+                        "  Row %d: crop_code=%s (type=%s)", i, code, type(code).__name__
+                    )
 
             # Convert to GeoDataFrame
             # DuckDB spatial extension returns geometry as WKB binary
