@@ -15,8 +15,9 @@ Coverage:
 
 Attributes:
     - Field ID (fiboa 'id'), administrative area (state FIPS)
-    - Crop type codes (fiboa 'crop:code_list' - CDL codes)
+    - Crop type code (fiboa 'crop:code' - 2023 CDL code)
     - Crop name (fiboa 'crop:name')
+    - Crop history (fiboa 'crop:code_list' - 8 years of CDL codes)
     - Geometry (polygon boundaries in EPSG:4326)
 
 Citation:
@@ -138,8 +139,9 @@ class FieldBoundaryDownloader(BaseDownloader):
                 - region: Region name (corn_belt, great_plains, southeast)
                 - state_fips: State FIPS code
                 - area_acres: Field size in acres (calculated from geometry)
-                - crop_code_list: Crop type codes (CDL codes)
+                - crop_code: 2023 crop type code (CDL code)
                 - crop_name: Crop name
+                - crop_code_list: Historical crop codes (8 years)
                 - geometry: Polygon geometry (EPSG:4326)
 
         Raises:
@@ -260,7 +262,7 @@ class FieldBoundaryDownloader(BaseDownloader):
             crop_codes = []
             for crop in crops:
                 crop_codes.extend(self.CROP_TYPES[crop])
-            crop_filter = ", ".join(["%s" % code for code in crop_codes])
+            crop_filter = ", ".join(["'%s'" % code for code in crop_codes])
 
             # Use actual parquet filename from Source Cooperative
             # Filename is us_usda_cropland.parquet (verified at source.coop)
@@ -268,27 +270,25 @@ class FieldBoundaryDownloader(BaseDownloader):
 
             # Build DuckDB query with filters
             # DuckDB pushes down these filters for efficient remote querying
-            # Note: fiboa schema uses:
+            # Note: fiboa schema has TWO crop code columns:
+            #   - 'crop:code' - 2023 crop type (single CDL code) - use this for filtering!
+            #   - 'crop:code_list' - historical crop codes (8 years, comma-separated)
+            # Also includes:
             #   - 'administrative_area_level_2' for state FIPS codes
-            #   - 'crop:code_list' for crop codes (string with comma-separated CDL codes)
             #   - 'crop:name' for crop name
             #   - 'id' for unique field identifier
-            # Column names with special chars need double quotes in DuckDB
-            #
-            # crop:code_list contains strings like "1,1,1,1,1,1,1,1" (8 years of crop codes)
-            # We check if any of our target crop codes appear in this list
+            # Column names with special chars (colons) need double quotes in DuckDB
             query = f"""
             SELECT
                 id as field_id,
                 administrative_area_level_2 as state_fips,
-                "crop:code_list" as crop_code_list,
+                "crop:code" as crop_code,
                 "crop:name" as crop_name,
+                "crop:code_list" as crop_code_list,
                 geometry
             FROM read_parquet('{parquet_url}')
             WHERE administrative_area_level_2 IN ({state_filter})
-              AND (
-                {' OR '.join([f'"crop:code_list" LIKE \'%{code}%\'' for code in crop_codes])}
-              )
+              AND "crop:code" IN ({crop_filter})
             ORDER BY random()
             LIMIT {count}
             """
@@ -340,8 +340,9 @@ class FieldBoundaryDownloader(BaseDownloader):
                 "region",
                 "state_fips",
                 "area_acres",
-                "crop_code_list",
+                "crop_code",
                 "crop_name",
+                "crop_code_list",
                 "geometry",
             ]
             gdf = gdf[column_order]
