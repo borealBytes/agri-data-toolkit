@@ -278,6 +278,8 @@ class FieldBoundaryDownloader(BaseDownloader):
             #   - 'crop:name' for crop name
             #   - 'id' for unique field identifier
             # Column names with special chars (colons) need double quotes in DuckDB
+            
+            # DEBUG: Temporarily remove crop filter to see what data exists
             query = f"""
             SELECT
                 id as field_id,
@@ -288,7 +290,6 @@ class FieldBoundaryDownloader(BaseDownloader):
                 geometry
             FROM read_parquet('{parquet_url}')
             WHERE administrative_area_level_2 IN ({state_filter})
-              AND "crop:code" IN ({crop_filter})
             ORDER BY random()
             LIMIT {count}
             """
@@ -306,6 +307,12 @@ class FieldBoundaryDownloader(BaseDownloader):
                 )
 
             self.logger.info("Retrieved %d fields from Source Cooperative", len(result_df))
+            
+            # DEBUG: Log sample crop codes to see actual format
+            if len(result_df) > 0:
+                self.logger.info("Sample crop codes from data:")
+                for idx, row in result_df.head(5).iterrows():
+                    self.logger.info(f"  crop_code={row['crop_code']} (type={type(row['crop_code']).__name__}), crop_name={row['crop_name']}")
 
             # Convert to GeoDataFrame
             # DuckDB spatial extension returns geometry as WKB binary
