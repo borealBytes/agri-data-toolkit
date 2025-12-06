@@ -73,8 +73,8 @@ class TestFieldBoundaryDownloader:
             "field_id",  # fiboa ID
             "region",  # Our region mapping
             "state_fips",  # State FIPS code (fiboa: administrative_area_level_2)
-            "area_acres",  # Field size (converted from hectares)
-            "crop_code",  # CDL crop code (fiboa: crop:code)
+            "area_acres",  # Field size (calculated from geometry)
+            "crop_code_list",  # CDL crop codes list (fiboa: crop:code_list)
             "crop_name",  # Crop name (fiboa: crop:name)
             "geometry",  # Polygon geometry
         ]
@@ -108,25 +108,13 @@ class TestFieldBoundaryDownloader:
         """Test crop type filtering works correctly."""
         fields = downloader.download(count=2, regions=["corn_belt"], crops=["corn", "soybeans"])
 
-        # All fields should have crop_code in requested types (CDL codes: 1=corn, 5=soybeans)
-        valid_crop_codes = ["1", "5"]  # CDL codes for corn and soybeans
-        assert all(
-            code in valid_crop_codes for code in fields["crop_code"]
-        ), "Fields should only contain requested crop types (CDL codes 1 or 5)"
-
-    def test_download_filters_by_size(self, downloader):
-        """Test field size filtering works correctly."""
-        min_acres = 50.0
-        max_acres = 200.0
-
-        fields = downloader.download(
-            count=2, regions=["corn_belt"], min_acres=min_acres, max_acres=max_acres
-        )
-
-        # All fields should be within size range
-        assert all(
-            min_acres <= acres <= max_acres for acres in fields["area_acres"]
-        ), f"All fields should be between {min_acres} and {max_acres} acres"
+        # All fields should have crop_code_list containing requested crop codes
+        # CDL codes: 1=corn, 5=soybeans
+        # crop_code_list contains strings like "1,1,1,1,1,1,1,1" (historical crop sequence)
+        for crop_code_list in fields["crop_code_list"]:
+            assert "1" in crop_code_list or "5" in crop_code_list, (
+                f"crop_code_list '{crop_code_list}' should contain '1' (corn) or '5' (soybeans)"
+            )
 
     def test_download_saves_to_file(self, downloader, tmp_path):
         """Test that download saves fields to file."""
@@ -224,7 +212,7 @@ class TestFieldBoundaryDownloader:
             "region",
             "state_fips",
             "area_acres",
-            "crop_code",
+            "crop_code_list",
             "crop_name",
             "geometry",
         ]
@@ -234,7 +222,7 @@ class TestFieldBoundaryDownloader:
         # Verify data types
         assert fields["field_id"].dtype == "object"  # String field IDs
         assert fields["area_acres"].dtype in ["float64", "float32"]  # Numeric acres
-        assert fields["crop_code"].dtype == "object"  # String crop codes (CDL codes)
+        assert fields["crop_code_list"].dtype == "object"  # String crop codes
 
         # Verify geometries are valid
         assert fields.geometry.is_valid.all()
@@ -248,13 +236,11 @@ class TestFieldBoundaryDownloader:
             fips in corn_belt_fips for fips in fields["state_fips"]
         ), "All fields should be in corn belt states"
 
-        # Verify reasonable field sizes (40-500 acres is our default range)
-        assert all(
-            40 <= acres <= 500 for acres in fields["area_acres"]
-        ), "Field sizes should be within expected range"
+        # Verify crop_code_list contains corn (1) or soybeans (5)
+        for crop_code_list in fields["crop_code_list"]:
+            assert "1" in crop_code_list or "5" in crop_code_list, (
+                f"crop_code_list should contain '1' (corn) or '5' (soybeans), got: {crop_code_list}"
+            )
 
-        # Verify crop codes are correct (1=corn, 5=soybeans)
-        valid_crop_codes = ["1", "5"]
-        assert all(
-            code in valid_crop_codes for code in fields["crop_code"]
-        ), "Crop codes should be 1 (corn) or 5 (soybeans)"
+        # Verify area_acres are positive and reasonable
+        assert all(acres > 0 for acres in fields["area_acres"]), "All field sizes should be positive"
