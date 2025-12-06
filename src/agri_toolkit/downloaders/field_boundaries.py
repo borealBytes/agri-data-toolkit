@@ -8,15 +8,15 @@ Data Source:
     https://source.coop/fiboa/us-usda-cropland
 
 Format:
-    GeoParquet (cloud-optimized columnar format)
+    GeoParquet (cloud-optimized columnar format following fiboa standard)
 
 Coverage:
     Entire contiguous United States, 16+ million field boundaries
 
 Attributes:
-    - Field ID, state/county FIPS codes
-    - Acreage (field size)
-    - 2023 crop type
+    - Field ID (fiboa 'id'), administrative area (state FIPS)
+    - Area in hectares (fiboa 'area')
+    - Crop type codes (fiboa 'crop:code' - CDL codes)
     - Geometry (polygon boundaries in EPSG:4326)
 
 Citation:
@@ -52,7 +52,7 @@ class FieldBoundaryDownloader(BaseDownloader):
         - southeast: AR, MS, LA, GA (cotton, rice, soybeans)
 
     Crops:
-        Corn, soybeans, wheat, cotton, and other row crops
+        Corn (1), soybeans (5), wheat (various), cotton (2) - using CDL codes
 
     Data Access:
         Uses DuckDB with spatial extension for efficient cloud-native
@@ -74,12 +74,13 @@ class FieldBoundaryDownloader(BaseDownloader):
         "southeast": ["05", "28", "22", "13"],  # AR, MS, LA, GA
     }
 
-    # Crop type mappings (CSB 2023 crop field)
+    # Crop type mappings - using CDL (Cropland Data Layer) codes
+    # These are standard USDA crop type codes
     CROP_TYPES = {
-        "corn": "corn",
-        "soybeans": "soybeans",
-        "wheat": "wheat",
-        "cotton": "cotton",
+        "corn": ["1"],  # Corn
+        "soybeans": ["5"],  # Soybeans
+        "wheat": ["23", "24", "25", "26", "27"],  # Spring/Winter/Durum wheat varieties
+        "cotton": ["2"],  # Cotton
     }
 
     def __init__(self, config: Optional[Config] = None) -> None:
@@ -137,12 +138,12 @@ class FieldBoundaryDownloader(BaseDownloader):
 
         Returns:
             GeoDataFrame containing field boundaries with attributes:
-                - field_id: Unique identifier (CSB ID)
+                - field_id: Unique identifier (fiboa ID)
                 - region: Region name (corn_belt, great_plains, southeast)
-                - state: State abbreviation
-                - county: County name
-                - area_acres: Field size in acres
-                - crop_2023: Crop type in 2023
+                - state_fips: State FIPS code
+                - area_acres: Field size in acres (converted from hectares)
+                - crop_code: Crop type code (CDL code)
+                - crop_name: Crop name
                 - geometry: Polygon geometry (EPSG:4326)
 
         Raises:
@@ -268,30 +269,43 @@ class FieldBoundaryDownloader(BaseDownloader):
             # Build state filter for SQL
             state_filter = ", ".join(["'%s'" % fips for fips in state_fips])
 
-            # Build crop filter for SQL
-            crop_filter = ", ".join(["'%s'" % self.CROP_TYPES[c] for c in crops])
+            # Build crop filter for SQL - collect all CDL codes for requested crops
+            crop_codes = []
+            for crop in crops:
+                crop_codes.extend(self.CROP_TYPES[crop])
+            crop_filter = ", ".join(["'%s'" % code for code in crop_codes])
 
             # Use actual parquet filename from Source Cooperative
             # Filename is us_usda_cropland.parquet (verified at source.coop)
             parquet_url = self.SOURCE_COOP_BASE_URL
 
+            # Convert acres to hectares for fiboa 'area' field
+            # 1 acre = 0.404686 hectares
+            min_hectares = min_acres * 0.404686
+            max_hectares = max_acres * 0.404686
+
             # Build DuckDB query with filters
             # DuckDB pushes down these filters for efficient remote querying
-            # Note: fiboa uses 'administrative_area_level_2' for state FIPS codes
+            # Note: fiboa schema uses:
+            #   - 'administrative_area_level_2' for state FIPS codes
+            #   - 'area' for field size in hectares
+            #   - 'crop:code' for crop type (CDL code) - note the colon!
+            #   - 'crop:name' for crop name
+            #   - 'id' for unique field identifier
+            # Column names with special chars need double quotes in DuckDB
             query = f"""
             SELECT
-                csb_id as field_id,
-                stateabbr as state,
-                ctyname as county,
-                acres as area_acres,
-                crop_2023,
-                geometry,
-                administrative_area_level_2 as state_fips
+                id as field_id,
+                administrative_area_level_2 as state_fips,
+                area as area_ha,
+                "crop:code" as crop_code,
+                "crop:name" as crop_name,
+                geometry
             FROM read_parquet('{parquet_url}')
             WHERE administrative_area_level_2 IN ({state_filter})
-              AND acres >= {min_acres}
-              AND acres <= {max_acres}
-              AND crop_2023 IN ({crop_filter})
+              AND area >= {min_hectares}
+              AND area <= {max_hectares}
+              AND "crop:code" IN ({crop_filter})
             ORDER BY random()
             LIMIT {count}
             """
@@ -314,6 +328,11 @@ class FieldBoundaryDownloader(BaseDownloader):
             # DuckDB spatial extension returns geometry as WKB binary
             gdf = gpd.GeoDataFrame(result_df, geometry="geometry", crs="EPSG:4326")
 
+            # Convert area from hectares to acres for user convenience
+            # 1 hectare = 2.47105 acres
+            gdf["area_acres"] = gdf["area_ha"] * 2.47105
+            gdf = gdf.drop(columns=["area_ha"])
+
             # Add region mapping back to data
             # Map state FIPS to region for user convenience
             state_to_region = {}
@@ -321,18 +340,22 @@ class FieldBoundaryDownloader(BaseDownloader):
                 for fips in fips_list:
                     state_to_region[fips] = region
 
-            # Get state FIPS from state abbreviation (need to query back)
-            # For simplicity, just use first region from user input
-            gdf["region"] = regions[0] if len(regions) == 1 else "mixed"
+            # Map state FIPS to region
+            gdf["region"] = gdf["state_fips"].map(state_to_region)
+            # If multiple regions, mark as mixed where region is null
+            if len(regions) > 1:
+                gdf["region"] = gdf["region"].fillna("mixed")
+            elif len(regions) == 1:
+                gdf["region"] = gdf["region"].fillna(regions[0])
 
             # Reorder columns for better readability
             column_order = [
                 "field_id",
                 "region",
-                "state",
-                "county",
+                "state_fips",
                 "area_acres",
-                "crop_2023",
+                "crop_code",
+                "crop_name",
                 "geometry",
             ]
             gdf = gdf[column_order]
