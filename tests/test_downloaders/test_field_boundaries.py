@@ -107,16 +107,8 @@ class TestFieldBoundaryDownloader:
         unique_regions = set(fields["region"].unique())
         assert len(unique_regions) >= 1, "Should have at least 1 region represented"
 
-    @pytest.mark.skip(
-        reason="Crop filter temporarily removed to debug actual crop_code format in data"
-    )
     def test_download_filters_by_crop(self, downloader):
-        """Test crop type filtering works correctly.
-
-        TEMPORARILY SKIPPED: Crop filter has been removed from the query to allow us
-        to see what crop_code values actually exist in the data. Once we discover the
-        correct format, we'll re-enable filtering and this test.
-        """
+        """Test crop type filtering works correctly."""
         fields = downloader.download(count=2, regions=["corn_belt"], crops=["corn", "soybeans"])
 
         # All fields should have crop_code matching requested types
@@ -250,19 +242,13 @@ class TestFieldBoundaryDownloader:
             fips in corn_belt_fips for fips in fields["state_fips"]
         ), "All fields should be in corn belt states"
 
-        # TEMPORARILY REMOVED: Crop filtering assertions while we debug actual crop_code format
-        # Once we see what crop codes actually look like in the logs, we'll fix the filter
-        # and re-enable these assertions:
-        #
-        # valid_crop_codes = ["1", "5"]
-        # assert all(
-        #     code in valid_crop_codes for code in fields["crop_code"]
-        # ), "All crop_code values should be '1' (corn) or '5' (soybeans)"
-        #
-        # for crop_code_list in fields["crop_code_list"]:
-        #     assert (
-        #         "1" in crop_code_list or "5" in crop_code_list
-        #     ), f"crop_code_list should contain '1' (corn) or '5' (soybeans), got: {crop_code_list}"
+        valid_crop_codes = ["1", "5"]
+        assert all(
+            code in valid_crop_codes for code in fields["crop_code"]
+        ), "All crop_code values should be '1' (corn) or '5' (soybeans)"
+
+        # Note: crop_code_list in the current dataset version contains a URL to the crop mapping
+        # rather than the historical codes themselves, so we cannot validate history here.
 
         # Verify area_acres are positive and reasonable
         assert all(

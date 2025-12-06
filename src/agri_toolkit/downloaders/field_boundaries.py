@@ -68,7 +68,7 @@ class FieldBoundaryDownloader(BaseDownloader):
     )
 
     # Mapping of regions to state FIPS codes
-    # fiboa uses administrative_area_level_2 for state FIPS codes
+    # fiboa id starts with state FIPS code (first 2 digits)
     REGION_STATE_FIPS = {
         "corn_belt": ["17", "19", "18", "39", "27"],  # IL, IA, IN, OH, MN
         "great_plains": ["20", "31", "46", "38", "48"],  # KS, NE, SD, ND, TX
@@ -258,38 +258,45 @@ class FieldBoundaryDownloader(BaseDownloader):
             # Build state filter for SQL
             state_filter = ", ".join(["'%s'" % fips for fips in state_fips])
 
-            # Build crop codes list for debug logging
+            # Build crop codes list for filtering
             crop_codes = []
             for crop in crops:
                 crop_codes.extend(self.CROP_TYPES[crop])
+
+            # Ensure crop codes are strings for SQL query
+            crop_filter = ", ".join(["'%s'" % code for code in crop_codes])
             self.logger.debug("Requested crop codes (CDL): %s", crop_codes)
 
             # Use actual parquet filename from Source Cooperative
             # Filename is us_usda_cropland.parquet (verified at source.coop)
             parquet_url = self.SOURCE_COOP_BASE_URL
 
-            # Build DuckDB query WITHOUT crop filter (temporarily removed for debugging)
+            # Build DuckDB query
             # DuckDB pushes down filters for efficient remote querying
             # Note: fiboa schema has TWO crop code columns:
             #   - 'crop:code' - 2023 crop type (single CDL code)
             #   - 'crop:code_list' - historical crop codes (8 years, comma-separated)
             # Also includes:
-            #   - 'administrative_area_level_2' for state FIPS codes
+            #   - 'administrative_area_level_2' is COUNTY name, NOT state FIPS
+            #   - 'id' starts with state FIPS (first 2 digits)
             #   - 'crop:name' for crop name
-            #   - 'id' for unique field identifier
             # Column names with special chars (colons) need double quotes in DuckDB
+            # Request extra fields to handle potential filtering of invalid/empty geometries
+            request_count = max(count * 2, count + 10)
+
             query = f"""
             SELECT
                 id as field_id,
-                administrative_area_level_2 as state_fips,
+                substr(id, 1, 2) as state_fips,
                 "crop:code" as crop_code,
                 "crop:name" as crop_name,
                 "crop:code_list" as crop_code_list,
-                geometry
+                ST_AsWKB(geometry) as geometry
             FROM read_parquet('{parquet_url}')
-            WHERE administrative_area_level_2 IN ({state_filter})
+            WHERE substr(id, 1, 2) IN ({state_filter})
+            AND "crop:code" IN ({crop_filter})
             ORDER BY random()
-            LIMIT {count}
+            LIMIT {request_count}
             """
 
             self.logger.debug("Executing DuckDB query: %s", query)
@@ -317,15 +324,41 @@ class FieldBoundaryDownloader(BaseDownloader):
 
             # Convert to GeoDataFrame
             # DuckDB spatial extension returns geometry as WKB binary
-            gdf = gpd.GeoDataFrame(result_df, geometry="geometry", crs="EPSG:4326")
+            if "geometry" in result_df.columns:
+                # Check if geometry is bytes or list of ints (DuckDB behavior varies)
+                if len(result_df) > 0:
+                    first_geom = result_df["geometry"].iloc[0]
+                    # If it's a list or bytearray (but not bytes), convert to bytes
+                    if not isinstance(first_geom, bytes) and (
+                        isinstance(first_geom, list) or hasattr(first_geom, "__iter__")
+                    ):
+                        result_df["geometry"] = result_df["geometry"].apply(lambda x: bytes(x))
+
+                result_df["geometry"] = gpd.GeoSeries.from_wkb(result_df["geometry"])
+
+            # Data is in EPSG:5070 (Albers Equal Area), NOT EPSG:4326
+            gdf = gpd.GeoDataFrame(result_df, geometry="geometry", crs="EPSG:5070")
 
             # Calculate area from geometry
-            # Need to project to equal-area coordinate system for accurate area calculation
-            # EPSG:5070 is Albers Equal Area (used by USDA for cropland data)
-            gdf_projected = gdf.to_crs("EPSG:5070")
+            # Data is already in equal-area projection (EPSG:5070)
             # Calculate area in square meters, convert to acres
             # 1 acre = 4046.86 square meters
-            gdf["area_acres"] = gdf_projected.geometry.area / 4046.86
+            gdf["area_acres"] = gdf.geometry.area / 4046.86
+
+            # Reproject to EPSG:4326 for output (standard for GeoJSON)
+            gdf = gdf.to_crs("EPSG:4326")
+
+            # Filter out fields with zero or negative area
+            initial_count = len(gdf)
+            gdf = gdf[gdf["area_acres"] > 0]
+            if len(gdf) < initial_count:
+                self.logger.warning(
+                    "Filtered out %d fields with zero/negative area", initial_count - len(gdf)
+                )
+
+            # Limit to requested count
+            if len(gdf) > count:
+                gdf = gdf.iloc[:count]
 
             # Add region mapping back to data
             # Map state FIPS to region for user convenience

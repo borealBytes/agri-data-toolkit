@@ -30,13 +30,13 @@ The result is a **realistic representation of agricultural field boundaries** us
 
 ## Key Features
 
-✅ **Zero Setup** - No API keys, accounts, or authentication required  
-✅ **Cloud-Native** - GeoParquet format with DuckDB for efficient querying  
-✅ **Filtered Downloads** - Server-side filtering reduces bandwidth  
-✅ **Regional Sampling** - Target specific agricultural regions  
-✅ **Crop Filtering** - Select specific crop types  
-✅ **Size Filtering** - Control min/max field sizes  
-✅ **Multiple Formats** - Export as GeoJSON or Shapefile  
+✅ **Zero Setup** - No API keys, accounts, or authentication required
+✅ **Cloud-Native** - GeoParquet format with DuckDB for efficient querying
+✅ **Filtered Downloads** - Server-side filtering reduces bandwidth
+✅ **Regional Sampling** - Target specific agricultural regions
+✅ **Crop Filtering** - Select specific crop types
+✅ **Size Filtering** - Control min/max field sizes
+✅ **Multiple Formats** - Export as GeoJSON or Shapefile
 
 ## Quick Start
 
@@ -279,9 +279,9 @@ USDA NASS Cropland Data Layer and Crop Sequence Boundaries are **public domain**
 ### Recommended Citation
 
 ```
-USDA National Agricultural Statistics Service Cropland Data Layer. 
-2023. Published crop-specific data layer [Online]. 
-Available at https://nassgeodata.gmu.edu/CropScape/ 
+USDA National Agricultural Statistics Service Cropland Data Layer.
+2023. Published crop-specific data layer [Online].
+Available at https://nassgeodata.gmu.edu/CropScape/
 USDA-NASS, Washington, DC.
 ```
 
@@ -315,11 +315,11 @@ a free and open geospatial data platform by Radiant Earth Foundation.
 
 DuckDB enables **cloud-native querying** of GeoParquet files:
 
-✅ Read remote files via HTTPS (no download required)  
-✅ Server-side filtering (only matching data transfers)  
-✅ Columnar format (efficient for attribute filtering)  
-✅ Spatial extension (geometry operations)  
-✅ Partition pruning (skip irrelevant state files)  
+✅ Read remote files via HTTPS (no download required)
+✅ Server-side filtering (only matching data transfers)
+✅ Columnar format (efficient for attribute filtering)
+✅ Spatial extension (geometry operations)
+✅ Partition pruning (skip irrelevant state files)
 
 Alternative (pure geopandas) would require downloading entire datasets.
 

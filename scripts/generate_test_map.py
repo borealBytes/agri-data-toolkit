@@ -155,10 +155,10 @@ def generate_map_html(geojson_path: Path, output_path: Path) -> None:
 </head>
 <body>
     <div id="map"></div>
-    
+
     <div class="controls">
         <h3>🌾 Field Boundary Test Data</h3>
-        
+
         <div class="control-group">
             <label for="basemap">Base Map:</label>
             <select id="basemap">
@@ -168,7 +168,7 @@ def generate_map_html(geojson_path: Path, output_path: Path) -> None:
                 <option value="terrain">Terrain (Stamen)</option>
             </select>
         </div>
-        
+
         <div class="control-group">
             <label for="field-select">Select Field:</label>
             <select id="field-select">
@@ -176,14 +176,14 @@ def generate_map_html(geojson_path: Path, output_path: Path) -> None:
                 {"\n                ".join([f'<option value="{opt["index"]}">{opt["label"]}</option>' for opt in field_options])}
             </select>
         </div>
-        
+
         <div class="stats">
             <div><strong>Total Fields:</strong> {len(features)}</div>
             <div><strong>Python Version:</strong> {sys.version.split()[0]}</div>
             <div><strong>Test Run:</strong> CI/CD Pipeline</div>
         </div>
     </div>
-    
+
     <div class="legend">
         <div class="legend-title">Field Boundaries</div>
         <div class="legend-item">
@@ -195,10 +195,10 @@ def generate_map_html(geojson_path: Path, output_path: Path) -> None:
     <script>
         // Embedded GeoJSON data
         const geojsonData = {json.dumps(geojson_data)};
-        
+
         // Initialize map
         const map = L.map('map').setView([41.5, -93.5], 7);
-        
+
         // Base layer definitions
         const baseLayers = {{
             'osm': L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
@@ -218,10 +218,10 @@ def generate_map_html(geojson_path: Path, output_path: Path) -> None:
                 maxZoom: 18
             }})
         }};
-        
+
         // Add default base layer
         let currentBaseLayer = baseLayers['osm'].addTo(map);
-        
+
         // Style function for fields
         function fieldStyle(feature) {{
             return {{
@@ -232,7 +232,7 @@ def generate_map_html(geojson_path: Path, output_path: Path) -> None:
                 fillOpacity: 0.3
             }};
         }}
-        
+
         // Popup function
         function onEachFeature(feature, layer) {{
             if (feature.properties) {{
@@ -252,26 +252,26 @@ def generate_map_html(geojson_path: Path, output_path: Path) -> None:
                 layer.bindPopup(popupContent);
             }}
         }}
-        
+
         // Add GeoJSON layer
         const geojsonLayer = L.geoJSON(geojsonData, {{
             style: fieldStyle,
             onEachFeature: onEachFeature
         }}).addTo(map);
-        
+
         // Fit bounds to all fields initially
         map.fitBounds(geojsonLayer.getBounds(), {{ padding: [50, 50] }});
-        
+
         // Base map selector
         document.getElementById('basemap').addEventListener('change', function(e) {{
             map.removeLayer(currentBaseLayer);
             currentBaseLayer = baseLayers[e.target.value].addTo(map);
         }});
-        
+
         // Field selector
         document.getElementById('field-select').addEventListener('change', function(e) {{
             const value = e.target.value;
-            
+
             if (value === 'all') {{
                 // Fit all fields
                 map.fitBounds(geojsonLayer.getBounds(), {{ padding: [50, 50] }});
@@ -280,11 +280,11 @@ def generate_map_html(geojson_path: Path, output_path: Path) -> None:
                 const featureIndex = parseInt(value);
                 const layers = [];
                 geojsonLayer.eachLayer(layer => layers.push(layer));
-                
+
                 if (layers[featureIndex]) {{
                     const bounds = layers[featureIndex].getBounds();
                     map.fitBounds(bounds, {{ padding: [100, 100] }});
-                    
+
                     // Open popup
                     setTimeout(() => {{
                         layers[featureIndex].openPopup();

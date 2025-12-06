@@ -4,10 +4,10 @@ Get up and running with the Agricultural Data Toolkit in 15 minutes.
 
 ## Prerequisites
 
-✅ Ubuntu LTS 20.04+ (or compatible Linux)  
-✅ Python 3.9+ installed  
-✅ 50GB+ free disk space  
-✅ Broadband internet connection  
+✅ Ubuntu LTS 20.04+ (or compatible Linux)
+✅ Python 3.9+ installed
+✅ 50GB+ free disk space
+✅ Broadband internet connection
 
 ## 1. Installation (5 minutes)
 
@@ -108,7 +108,7 @@ fields = gpd.read_file("data/processed/integrated/fields_with_soil.geojson")
 
 # Plot organic matter distribution
 fig, ax = plt.subplots(figsize=(12, 8))
-fields.plot(column='om_pct', 
+fields.plot(column='om_pct',
             cmap='YlOrBr',
             legend=True,
             ax=ax,
@@ -126,7 +126,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 # Load weather data
-weather = pd.read_csv("data/raw/weather/all_fields_weather.csv", 
+weather = pd.read_csv("data/raw/weather/all_fields_weather.csv",
                       parse_dates=['date'])
 
 # Calculate growing degree days

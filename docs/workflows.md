@@ -31,12 +31,12 @@ Job 4: Build (after test passes)
 
 ## Key Features
 
-✅ **Single workflow** - No race conditions, no complexity  
-✅ **Auto-format first** - Always formats before CI checks  
-✅ **Sequential jobs** - Each job waits for previous to pass  
-✅ **Format commit included** - Commits are part of the pipeline  
-✅ **Same SHA for all jobs** - All jobs run on formatted code  
-✅ **Zero maintenance** - Just push code, pipeline handles rest  
+✅ **Single workflow** - No race conditions, no complexity
+✅ **Auto-format first** - Always formats before CI checks
+✅ **Sequential jobs** - Each job waits for previous to pass
+✅ **Format commit included** - Commits are part of the pipeline
+✅ **Same SHA for all jobs** - All jobs run on formatted code
+✅ **Zero maintenance** - Just push code, pipeline handles rest
 
 ## Workflow File
 
@@ -118,10 +118,10 @@ Job 4: Build (after test passes)
 
 ## Execution Guarantee
 
-✅ **Format always runs first** - Happens before any checks  
-✅ **All jobs use formatted code** - Same SHA across pipeline  
-✅ **No race conditions** - Sequential job dependencies  
-✅ **Atomic commits** - Format commits part of pipeline  
+✅ **Format always runs first** - Happens before any checks
+✅ **All jobs use formatted code** - Same SHA across pipeline
+✅ **No race conditions** - Sequential job dependencies
+✅ **Atomic commits** - Format commits part of pipeline
 
 ## Execution Flow Examples
 
@@ -251,10 +251,10 @@ git push  # Pipeline formats automatically
 
 ### Benefits
 
-✅ **Zero config** - Just push code  
-✅ **Auto-fixes formatting** - Don't worry about style  
-✅ **Clear feedback** - Pass/fail status on PR  
-✅ **Production ready** - If pipeline passes, code is good  
+✅ **Zero config** - Just push code
+✅ **Auto-fixes formatting** - Don't worry about style
+✅ **Clear feedback** - Pass/fail status on PR
+✅ **Production ready** - If pipeline passes, code is good
 
 ## Troubleshooting
 
@@ -283,7 +283,7 @@ git push  # Pipeline formats automatically
 
 **Cause**: Test failures or missing dependencies
 
-**Solution**: 
+**Solution**:
 ```bash
 # Run tests locally
 poetry run pytest tests/ -v
@@ -320,10 +320,10 @@ poetry build
 
 ### Optimization
 
-✅ **Cached dependencies** - Poetry venv cached  
-✅ **Parallel where possible** - Multiple test runners  
-✅ **Fail fast** - Lint before expensive tests  
-✅ **Conditional artifacts** - Only upload when labeled  
+✅ **Cached dependencies** - Poetry venv cached
+✅ **Parallel where possible** - Multiple test runners
+✅ **Fail fast** - Lint before expensive tests
+✅ **Conditional artifacts** - Only upload when labeled
 
 ## Best Practices
 
