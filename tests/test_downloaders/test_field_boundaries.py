@@ -74,8 +74,9 @@ class TestFieldBoundaryDownloader:
             "region",  # Our region mapping
             "state_fips",  # State FIPS code (fiboa: administrative_area_level_2)
             "area_acres",  # Field size (calculated from geometry)
-            "crop_code_list",  # CDL crop codes list (fiboa: crop:code_list)
+            "crop_code",  # 2023 CDL crop code (fiboa: crop:code)
             "crop_name",  # Crop name (fiboa: crop:name)
+            "crop_code_list",  # Historical CDL crop codes (fiboa: crop:code_list)
             "geometry",  # Polygon geometry
         ]
 
@@ -84,6 +85,8 @@ class TestFieldBoundaryDownloader:
 
         # Verify data types
         assert fields["area_acres"].dtype in ["float64", "float32"], "area_acres should be numeric"
+        assert fields["crop_code"].dtype == "object", "crop_code should be string"
+        assert fields["crop_code_list"].dtype == "object", "crop_code_list should be string"
 
     def test_download_has_crs(self, downloader):
         """Test that GeoDataFrame has correct coordinate reference system."""
@@ -108,13 +111,12 @@ class TestFieldBoundaryDownloader:
         """Test crop type filtering works correctly."""
         fields = downloader.download(count=2, regions=["corn_belt"], crops=["corn", "soybeans"])
 
-        # All fields should have crop_code_list containing requested crop codes
+        # All fields should have crop_code matching requested types
         # CDL codes: 1=corn, 5=soybeans
-        # crop_code_list contains strings like "1,1,1,1,1,1,1,1" (historical crop sequence)
-        for crop_code_list in fields["crop_code_list"]:
-            assert (
-                "1" in crop_code_list or "5" in crop_code_list
-            ), f"crop_code_list '{crop_code_list}' should contain '1' (corn) or '5' (soybeans)"
+        valid_crop_codes = ["1", "5"]
+        assert all(
+            code in valid_crop_codes for code in fields["crop_code"]
+        ), "All crop_code values should be '1' (corn) or '5' (soybeans)"
 
     def test_download_saves_to_file(self, downloader, tmp_path):
         """Test that download saves fields to file."""
@@ -212,8 +214,9 @@ class TestFieldBoundaryDownloader:
             "region",
             "state_fips",
             "area_acres",
-            "crop_code_list",
+            "crop_code",
             "crop_name",
+            "crop_code_list",
             "geometry",
         ]
         for col in expected_cols:
@@ -222,7 +225,8 @@ class TestFieldBoundaryDownloader:
         # Verify data types
         assert fields["field_id"].dtype == "object"  # String field IDs
         assert fields["area_acres"].dtype in ["float64", "float32"]  # Numeric acres
-        assert fields["crop_code_list"].dtype == "object"  # String crop codes
+        assert fields["crop_code"].dtype == "object"  # String crop code (2023)
+        assert fields["crop_code_list"].dtype == "object"  # String crop codes (historical)
 
         # Verify geometries are valid
         assert fields.geometry.is_valid.all()
@@ -235,6 +239,12 @@ class TestFieldBoundaryDownloader:
         assert all(
             fips in corn_belt_fips for fips in fields["state_fips"]
         ), "All fields should be in corn belt states"
+
+        # Verify crop_code is corn (1) or soybeans (5)
+        valid_crop_codes = ["1", "5"]
+        assert all(
+            code in valid_crop_codes for code in fields["crop_code"]
+        ), "All crop_code values should be '1' (corn) or '5' (soybeans)"
 
         # Verify crop_code_list contains corn (1) or soybeans (5)
         for crop_code_list in fields["crop_code_list"]:
