@@ -86,7 +86,7 @@ class TestFieldBoundaryDownloader:
         # Verify data types
         assert fields["area_acres"].dtype in ["float64", "float32"], "area_acres should be numeric"
         assert fields["crop_code"].dtype == "object", "crop_code should be string"
-        assert fields["crop_code_list"].dtype == "object", "crop_code_list should be string"
+        assert fields["crop_code_list"].dtype == "object", "Historical crop codes"
 
     def test_download_has_crs(self, downloader):
         """Test that GeoDataFrame has correct coordinate reference system."""
@@ -236,7 +236,7 @@ class TestFieldBoundaryDownloader:
         assert fields["field_id"].dtype == "object"  # String field IDs
         assert fields["area_acres"].dtype in ["float64", "float32"]  # Numeric acres
         assert fields["crop_code"].dtype == "object"  # String crop code (2023)
-        assert fields["crop_code_list"].dtype == "object"  # String crop codes (historical)
+        assert fields["crop_code_list"].dtype == "object"  # Historical codes
 
         # Verify geometries are valid
         assert fields.geometry.is_valid.all()
