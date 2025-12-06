@@ -36,18 +36,18 @@ The **Agricultural Data Toolkit** is designed to streamline the acquisition and 
 
 Agricultural data analysis requires integrating multiple heterogeneous data sources with different formats, spatial resolutions, and temporal scales. This toolkit:
 
-✅ **Automates** tedious data acquisition workflows  
-✅ **Standardizes** data formats and coordinate systems  
-✅ **Integrates** multiple data layers for field-level analysis  
-✅ **Validates** data quality and completeness  
-✅ **Exports** analysis-ready datasets for visualization and modeling  
+✅ **Automates** tedious data acquisition workflows
+✅ **Standardizes** data formats and coordinate systems
+✅ **Integrates** multiple data layers for field-level analysis
+✅ **Validates** data quality and completeness
+✅ **Exports** analysis-ready datasets for visualization and modeling
 
 ## 🎓 Course Context
 
-**Course**: Agricultural Data Analytics  
-**Instructor**: Clayton Young (ex-Bayer, ex-Monsanto, ex-Climate Corporation)  
-**Duration**: 8 weeks, 14 lessons  
-**Target**: Data analysts, GIS specialists, agronomists, and ag-tech professionals  
+**Course**: Agricultural Data Analytics
+**Instructor**: Clayton Young (ex-Bayer, ex-Monsanto, ex-Climate Corporation)
+**Duration**: 8 weeks, 14 lessons
+**Target**: Data analysts, GIS specialists, agronomists, and ag-tech professionals
 
 This toolkit serves as the **foundation data package** for all course assignments and the final project: a **Row Crop Intelligence Data Dashboard**.
 
@@ -306,9 +306,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Contact
 
-**Instructor**: Clayton Young  
-**GitHub**: [@borealBytes](https://github.com/borealBytes)  
-**Course Platform**: ELVTR  
+**Instructor**: Clayton Young
+**GitHub**: [@borealBytes](https://github.com/borealBytes)
+**Course Platform**: ELVTR
 
 ---
 

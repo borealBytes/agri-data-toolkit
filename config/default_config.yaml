@@ -92,7 +92,7 @@ imagery:
       - B11  # SWIR
     cloud_cover_max: 20
     resolution_m: 10
-  
+
   landsat:
     enabled: true
     bands:
@@ -102,7 +102,7 @@ imagery:
       - B6   # SWIR1
     cloud_cover_max: 20
     resolution_m: 30
-  
+
   indices:
     - ndvi   # Normalized Difference Vegetation Index
     - evi    # Enhanced Vegetation Index

@@ -4,13 +4,13 @@ Detailed implementation plan for the Agricultural Data Toolkit, aligned with the
 
 ## Timeline Overview
 
-**Course Dates**: February 12 - March 31, 2026  
-**Development Start**: December 2025  
-**Production Ready**: February 10, 2026 (before Welcome Class)  
+**Course Dates**: February 12 - March 31, 2026
+**Development Start**: December 2025
+**Production Ready**: February 10, 2026 (before Welcome Class)
 
 ## Phase 1: Foundation & Core Downloads
-**Timeline**: Weeks 1-2 (December 2025)  
-**Status**: 🚧 In Progress  
+**Timeline**: Weeks 1-2 (December 2025)
+**Status**: 🚧 In Progress
 
 ### Week 1: Project Setup
 
@@ -55,8 +55,8 @@ Detailed implementation plan for the Agricultural Data Toolkit, aligned with the
 ---
 
 ## Phase 2: Weather & Climate Data
-**Timeline**: Weeks 3-4 (January 2026)  
-**Status**: 📋 Planned  
+**Timeline**: Weeks 3-4 (January 2026)
+**Status**: 📋 Planned
 
 ### Week 3: NASA POWER Integration
 
@@ -91,8 +91,8 @@ Detailed implementation plan for the Agricultural Data Toolkit, aligned with the
 ---
 
 ## Phase 3: Satellite Imagery
-**Timeline**: Weeks 5-6 (January-February 2026)  
-**Status**: 📋 Planned  
+**Timeline**: Weeks 5-6 (January-February 2026)
+**Status**: 📋 Planned
 
 ### Week 5: Sentinel-2 Downloader
 
@@ -136,8 +136,8 @@ Detailed implementation plan for the Agricultural Data Toolkit, aligned with the
 ---
 
 ## Phase 4: Cropland Data & Integration
-**Timeline**: Week 7 (February 2026)  
-**Status**: 📋 Planned  
+**Timeline**: Week 7 (February 2026)
+**Status**: 📋 Planned
 
 ### Cropland Data Layer (CDL)
 
@@ -171,8 +171,8 @@ Detailed implementation plan for the Agricultural Data Toolkit, aligned with the
 ---
 
 ## Phase 5: Validation & Documentation
-**Timeline**: Week 8 (February 1-10, 2026)  
-**Status**: 📋 Planned  
+**Timeline**: Week 8 (February 1-10, 2026)
+**Status**: 📋 Planned
 
 ### Data Validation Framework
 
@@ -206,8 +206,8 @@ Detailed implementation plan for the Agricultural Data Toolkit, aligned with the
 ---
 
 ## Phase 6: Optional Datasets & Extensions
-**Timeline**: Weeks 9-10 (Mid-course, March 2026)  
-**Status**: 💡 Future  
+**Timeline**: Weeks 9-10 (Mid-course, March 2026)
+**Status**: 💡 Future
 
 ### USDA NASS/ERS Statistics
 
@@ -239,8 +239,8 @@ Detailed implementation plan for the Agricultural Data Toolkit, aligned with the
 ---
 
 ## Phase 7: Advanced Features
-**Timeline**: Post-course (April 2026+)  
-**Status**: 💡 Future  
+**Timeline**: Post-course (April 2026+)
+**Status**: 💡 Future
 
 ### Performance Optimization
 
@@ -336,7 +336,7 @@ Detailed implementation plan for the Agricultural Data Toolkit, aligned with the
 
 ### Critical Path Items
 
-1. **Field Boundaries**: 
+1. **Field Boundaries**:
    - Risk: Sample data may not be representative
    - Mitigation: Manual curation of diverse regions/crops
 
@@ -368,23 +368,23 @@ Detailed implementation plan for the Agricultural Data Toolkit, aligned with the
 
 By February 10, 2026:
 
-✅ 200 field boundaries downloaded  
-✅ Soil data joined to all fields  
-✅ Weather data (2020-2024) for all fields  
-✅ Satellite imagery (summer 2024) for all fields  
-✅ Validation passing (>95% complete)  
-✅ Documentation complete  
-✅ Example workflows tested  
-✅ Ubuntu LTS compatible  
+✅ 200 field boundaries downloaded
+✅ Soil data joined to all fields
+✅ Weather data (2020-2024) for all fields
+✅ Satellite imagery (summer 2024) for all fields
+✅ Validation passing (>95% complete)
+✅ Documentation complete
+✅ Example workflows tested
+✅ Ubuntu LTS compatible
 
 ### Stretch Goals
 
-✅ NOAA station data integrated  
-✅ Cropland Data Layer included  
-✅ Automated validation with auto-fix  
-✅ Performance optimizations (parallel)  
-✅ Jupyter notebooks (5+ examples)  
-✅ Docker container available  
+✅ NOAA station data integrated
+✅ Cropland Data Layer included
+✅ Automated validation with auto-fix
+✅ Performance optimizations (parallel)
+✅ Jupyter notebooks (5+ examples)
+✅ Docker container available
 
 ---
 
@@ -437,9 +437,9 @@ By February 10, 2026:
 
 ## Contact & Updates
 
-**Project Lead**: Clayton Young (@borealBytes)  
-**Repository**: https://github.com/borealBytes/agri-data-toolkit  
-**Issues**: https://github.com/borealBytes/agri-data-toolkit/issues  
-**Discussions**: https://github.com/borealBytes/agri-data-toolkit/discussions  
+**Project Lead**: Clayton Young (@borealBytes)
+**Repository**: https://github.com/borealBytes/agri-data-toolkit
+**Issues**: https://github.com/borealBytes/agri-data-toolkit/issues
+**Discussions**: https://github.com/borealBytes/agri-data-toolkit/discussions
 
 Updates will be posted weekly in the course portal during development.

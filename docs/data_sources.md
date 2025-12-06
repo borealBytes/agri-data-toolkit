@@ -15,7 +15,7 @@ Vector polygons representing individual agricultural fields used for row crop pr
 
 #### Specifications
 - **Count**: ~200 fields
-- **Geographic Coverage**: 
+- **Geographic Coverage**:
   - Corn Belt (IL, IA, IN, OH, MN)
   - Great Plains (KS, NE, SD, ND, TX)
   - Southeast (AR, MS, LA, GA)
@@ -233,7 +233,7 @@ Public domain (US Government work)
 **Specifications**:
 - **Satellites**: Sentinel-2A (launched 2015), Sentinel-2B (launched 2017)
 - **Revisit Time**: 5 days (2-3 days at mid-latitudes with both satellites)
-- **Spatial Resolution**: 
+- **Spatial Resolution**:
   - 10m: Blue (B2), Green (B3), Red (B4), NIR (B8)
   - 20m: Red Edge (B5, B6, B7), SWIR (B11, B12)
   - 60m: Aerosol, Water vapor, Cirrus
@@ -256,7 +256,7 @@ Public domain (US Government work)
 **Specifications**:
 - **Satellites**: Landsat 8 (2013), Landsat 9 (2021)
 - **Revisit Time**: 16 days (8 days combined)
-- **Spatial Resolution**: 
+- **Spatial Resolution**:
   - 30m: Visible, NIR, SWIR
   - 100m: Thermal
   - 15m: Panchromatic

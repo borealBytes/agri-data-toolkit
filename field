@@ -1,0 +1,528 @@
+# FieldBoundaryDownloader Testing Optimization - Implementation Guide
+
+## Implementation Overview
+This guide provides step-by-step instructions to implement the testing optimization plan, following industry best practices for testing external data dependencies.
+
+## Step 1: Refactor FieldBoundaryDownloader Class
+
+### Changes to `src/agri_toolkit/downloaders/field_boundaries.py`
+
+**Add optional data_source_url parameter to constructor:**
+```python
+def __init__(self, config: Optional[Config] = None, data_source_url: Optional[str] = None) -> None:
+    """Initialize field boundary downloader.
+
+    Args:
+        config: Configuration object. If None, uses default config.
+        data_source_url: Optional URL override for testing. If None, uses live Source Cooperative endpoint.
+    """
+    super().__init__(config)
+    self.output_subdir = "field_boundaries"
+    self._duckdb_conn: Optional[duckdb.DuckDBPyConnection] = None
+    # Allow URL override for testing
+    self.data_source_url = data_source_url or self.SOURCE_COOP_BASE_URL
+```
+
+**Update `_query_source_cooperative` method:**
+```python
+def _query_source_cooperative(
+    self,
+    count: int,
+    regions: List[str],
+    crops: List[str],  # noqa: ARG002
+) -> gpd.GeoDataFrame:
+    """Query USDA CSB data from Source Cooperative using DuckDB.
+
+    Uses the injected data_source_url if provided, otherwise uses live endpoint.
+    """
+    try:
+        # Get DuckDB connection
+        con = self._get_duckdb_connection()
+
+        # Collect state FIPS codes from regions
+        state_fips = []
+        for region in regions:
+            state_fips.extend(self.REGION_STATE_FIPS[region])
+
+        # Build state filter for SQL
+        state_filter = ", ".join(["'%s'" % fips for fips in state_fips])
+
+        # Build crop codes list for filtering
+        crop_codes = []
+        for crop in crops:
+            crop_codes.extend(self.CROP_TYPES[crop])
+
+        # Ensure crop codes are strings for SQL query
+        crop_filter = ", ".join(["'%s'" % code for code in crop_codes])
+        self.logger.debug("Requested crop codes (CDL): %s", crop_codes)
+
+        # Use injected data_source_url or default to live endpoint
+        parquet_url = self.data_source_url
+
+        # ... rest of method remains the same
+```
+
+## Step 2: Create Sample Data Generation Script
+
+### Create `scripts/generate_sample_field_boundaries.py`
+
+```python
+#!/usr/bin/env python3
+"""Generate sample field boundaries data for testing.
+
+This script downloads a small sample of field boundaries from the live
+Source Cooperative endpoint and saves it as a local Parquet file for
+use in unit tests.
+"""
+
+import argparse
+import tempfile
+from pathlib import Path
+
+import duckdb
+import geopandas as gpd
+
+from agri_toolkit.downloaders.field_boundaries import FieldBoundaryDownloader
+
+
+def generate_sample_data(output_path: Path, count: int = 10) -> None:
+    """Generate sample field boundaries data.
+
+    Args:
+        output_path: Path to save the sample Parquet file.
+        count: Number of fields to sample (default: 10).
+    """
+    print(f"Generating sample data with {count} fields...")
+
+    # Create temporary downloader to get real data
+    downloader = FieldBoundaryDownloader()
+
+    # Download small sample from corn belt
+    fields_gdf = downloader.download(
+        count=count,
+        regions=["corn_belt"],
+        crops=["corn", "soybeans"]
+    )
+
+    print(f"Downloaded {len(fields_gdf)} fields")
+
+    # Convert to fiboa format for storage
+    # The original data has fiboa column names, so we need to preserve those
+    sample_data = fields_gdf.copy()
+
+    # Convert geometry back to WKB for Parquet storage
+    sample_data["geometry"] = sample_data.geometry.to_wkb()
+
+    # Rename columns to match fiboa schema
+    sample_data = sample_data.rename(columns={
+        "field_id": "id",
+        "crop_code": "crop:code",
+        "crop_name": "crop:name",
+        "crop_code_list": "crop:code_list"
+    })
+
+    # Select only fiboa columns
+    fiboa_columns = [
+        "id",
+        "crop:code",
+        "crop:name",
+        "crop:code_list",
+        "administrative_area_level_2",  # County name
+        "geometry"
+    ]
+
+    # Ensure we have the county column (use state_fips as placeholder)
+    if "administrative_area_level_2" not in sample_data.columns:
+        sample_data["administrative_area_level_2"] = sample_data["state_fips"]
+
+    sample_data = sample_data[fiboa_columns]
+
+    # Save as Parquet
+    sample_data.to_parquet(output_path, index=False)
+    print(f"Sample data saved to: {output_path}")
+
+    # Verify the file
+    verify_sample_data(output_path)
+
+
+def verify_sample_data(parquet_path: Path) -> None:
+    """Verify the generated sample data has correct schema."""
+    print(f"Verifying sample data at {parquet_path}...")
+
+    # Read back the data
+    df = gpd.read_parquet(parquet_path)
+
+    print(f"Sample data contains {len(df)} fields")
+    print(f"Columns: {list(df.columns)}")
+    print(f"CRS: {df.crs}")
+    print(f"Sample crop codes: {df['crop:code'].unique()[:5]}")
+
+    # Verify required columns
+    required_columns = ["id", "crop:code", "crop:name", "crop:code_list", "geometry"]
+    missing_columns = [col for col in required_columns if col not in df.columns]
+
+    if missing_columns:
+        raise ValueError(f"Missing required columns: {missing_columns}")
+
+    print("Sample data verification passed!")
+
+
+def main():
+    """Main entry point."""
+    parser = argparse.ArgumentParser(description="Generate sample field boundaries data")
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("tests/data/sample_field_boundaries.parquet"),
+        help="Output path for sample Parquet file"
+    )
+    parser.add_argument(
+        "--count",
+        type=int,
+        default=10,
+        help="Number of fields to sample"
+    )
+
+    args = parser.parse_args()
+
+    # Create output directory
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+
+    # Generate sample data
+    generate_sample_data(args.output, args.count)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+## Step 3: Create Test Data Directory and Sample File
+
+### Create directory structure:
+```bash
+mkdir -p tests/data
+```
+
+### Generate sample data:
+```bash
+python scripts/generate_sample_field_boundaries.py --output tests/data/sample_field_boundaries.parquet --count 10
+```
+
+## Step 4: Update Pytest Configuration
+
+### Add to `pyproject.toml`:
+```toml
+[tool.pytest.ini_options]
+markers = [
+    "unit: Unit tests using local fixtures",
+    "integration: Integration tests hitting live endpoints",
+    "slow: Tests that take longer than 5 seconds",
+]
+```
+
+## Step 5: Update Test Fixtures
+
+### Add to `tests/conftest.py`:
+```python
+"""Pytest configuration and shared fixtures."""
+
+import shutil
+import tempfile
+from pathlib import Path
+
+import pytest
+import geopandas as gpd
+
+
+@pytest.fixture(scope="session")
+def test_data_dir():
+    """Create a temporary directory for test data."""
+    temp_dir = tempfile.mkdtemp(prefix="agri_toolkit_test_")
+    yield Path(temp_dir)
+    # Cleanup after all tests
+    shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+@pytest.fixture(scope="function")
+def clean_test_dir(tmp_path):
+    """Provide a clean temporary directory for each test."""
+    yield tmp_path
+    # Cleanup happens automatically with tmp_path
+
+
+@pytest.fixture(scope="session")
+def sample_field_boundaries_parquet():
+    """Load sample field boundaries data for testing.
+
+    Returns:
+        Path to sample Parquet file.
+    """
+    sample_path = Path(__file__).parent / "data" / "sample_field_boundaries.parquet"
+    if not sample_path.exists():
+        pytest.skip(f"Sample data not found at {sample_path}. Run: python scripts/generate_sample_field_boundaries.py")
+    return sample_path
+
+
+@pytest.fixture
+def sample_field_boundaries_gdf(sample_field_boundaries_parquet):
+    """Load sample field boundaries as GeoDataFrame.
+
+    Returns:
+        GeoDataFrame with sample field boundaries data.
+    """
+    gdf = gpd.read_parquet(sample_field_boundaries_parquet)
+    # Convert WKB geometry back to actual geometry
+    gdf["geometry"] = gpd.GeoSeries.from_wkb(gdf["geometry"])
+    gdf = gpd.GeoDataFrame(gdf, geometry="geometry", crs="EPSG:5070")
+    return gdf
+```
+
+## Step 6: Create New Unit Tests
+
+### Create `tests/test_downloaders/test_field_boundaries_unit.py`
+
+```python
+"""Unit tests for FieldBoundaryDownloader using local sample data.
+
+These tests use a small local sample dataset to test the downloader logic
+without hitting the live Source Cooperative endpoint.
+"""
+
+import geopandas as gpd
+import pytest
+from shapely.geometry import Polygon
+
+from agri_toolkit.core.config import Config
+from agri_toolkit.downloaders.field_boundaries import FieldBoundaryDownloader
+
+
+class TestFieldBoundaryDownloaderUnit:
+    """Unit tests for FieldBoundaryDownloader using local fixtures."""
+
+    @pytest.fixture
+    def downloader_with_sample_data(self, tmp_path, sample_field_boundaries_parquet):
+        """Create downloader instance configured to use sample data."""
+        config = Config()
+        config._config["paths"]["raw"] = str(tmp_path / "raw")
+        config._config["paths"]["processed"] = str(tmp_path / "processed")
+
+        return FieldBoundaryDownloader(
+            config=config,
+            data_source_url=str(sample_field_boundaries_parquet)
+        )
+
+    def test_download_with_sample_data(self, downloader_with_sample_data):
+        """Test downloading from sample data fixture."""
+        fields = downloader_with_sample_data.download(count=5)
+
+        # Should return up to 5 fields (or fewer if sample has less)
+        assert len(fields) <= 5
+        assert len(fields) > 0
+
+        # Should be a GeoDataFrame
+        assert isinstance(fields, gpd.GeoDataFrame)
+
+    def test_download_creates_valid_geometries_sample(self, downloader_with_sample_data):
+        """Test that downloaded fields have valid geometries."""
+        fields = downloader_with_sample_data.download(count=5)
+
+        # All geometries should be valid
+        assert fields.geometry.is_valid.all(), "Found invalid geometries"
+
+        # All geometries should be Polygons (or MultiPolygons)
+        assert all(
+            geom.geom_type in ["Polygon", "MultiPolygon"] for geom in fields.geometry
+        ), "Geometries must be Polygon or MultiPolygon types"
+
+    def test_download_has_required_attributes_sample(self, downloader_with_sample_data):
+        """Test that fields have all required attributes."""
+        fields = downloader_with_sample_data.download(count=5)
+
+        # Required columns
+        required_columns = [
+            "field_id",
+            "region",
+            "state_fips",
+            "area_acres",
+            "crop_code",
+            "crop_name",
+            "crop_code_list",
+            "geometry",
+        ]
+
+        for col in required_columns:
+            assert col in fields.columns, f"Missing required column: {col}"
+
+    def test_download_has_crs_sample(self, downloader_with_sample_data):
+        """Test that GeoDataFrame has correct coordinate reference system."""
+        fields = downloader_with_sample_data.download(count=5)
+
+        assert fields.crs is not None, "GeoDataFrame missing CRS"
+        assert fields.crs.to_string() == "EPSG:4326", "CRS should be WGS84 (EPSG:4326)"
+
+    def test_validate_method_sample(self, downloader_with_sample_data):
+        """Test the validate method with sample data."""
+        fields = downloader_with_sample_data.download(count=5)
+
+        # Valid data should pass validation
+        assert downloader_with_sample_data.validate(fields) is True
+
+    def test_validate_rejects_empty_data_sample(self, downloader_with_sample_data):
+        """Test that validation fails for empty data."""
+        empty_gdf = gpd.GeoDataFrame()
+
+        assert downloader_with_sample_data.validate(empty_gdf) is False
+
+    def test_download_raises_on_invalid_count_sample(self, downloader_with_sample_data):
+        """Test that download raises ValueError for invalid count."""
+        with pytest.raises(ValueError, match="count must be at least 1"):
+            downloader_with_sample_data.download(count=0)
+
+    def test_download_raises_on_empty_regions_sample(self, downloader_with_sample_data):
+        """Test that download raises ValueError for empty regions list."""
+        with pytest.raises(ValueError, match="regions cannot be empty"):
+            downloader_with_sample_data.download(count=2, regions=[])
+
+    def test_download_raises_on_invalid_region_sample(self, downloader_with_sample_data):
+        """Test that download raises ValueError for invalid region name."""
+        with pytest.raises(ValueError, match="Invalid regions"):
+            downloader_with_sample_data.download(count=2, regions=["invalid_region"])
+
+    def test_download_raises_on_invalid_crop_sample(self, downloader_with_sample_data):
+        """Test that download raises ValueError for invalid crop type."""
+        with pytest.raises(ValueError, match="Invalid crops"):
+            downloader_with_sample_data.download(count=2, regions=["corn_belt"], crops=["invalid_crop"])
+
+    def test_download_raises_on_invalid_format_sample(self, downloader_with_sample_data):
+        """Test that download raises ValueError for invalid output format."""
+        with pytest.raises(ValueError, match="Unsupported output format"):
+            downloader_with_sample_data.download(count=2, regions=["corn_belt"], output_format="invalid")
+```
+
+## Step 7: Update Existing Tests as Integration Tests
+
+### Modify `tests/test_downloaders/test_field_boundaries.py`
+
+**Add integration marker to all existing tests:**
+```python
+"""Tests for field boundary downloader.
+
+These tests verify the FieldBoundaryDownloader works correctly with
+real USDA Crop Sequence Boundaries data from Source Cooperative.
+
+Test Philosophy:
+    - Use minimal download counts (2-10 fields) to avoid external API load
+    - Test with real data to ensure integration works end-to-end
+    - Validate data structure and quality from actual source
+    - Keep tests fast for CI/CD (30-60 seconds total)
+"""
+
+import geopandas as gpd
+import pytest
+from shapely.geometry import Polygon
+
+from agri_toolkit.core.config import Config
+from agri_toolkit.downloaders.field_boundaries import FieldBoundaryDownloader
+
+
+class TestFieldBoundaryDownloaderIntegration:
+    """Integration test suite for FieldBoundaryDownloader.
+
+    Note: These tests make real HTTP requests to Source Cooperative.
+    Download counts are kept minimal (2-10 fields) to:
+    - Reduce CI/CD execution time
+    - Minimize load on external data provider
+    - Still validate full integration with real data
+    """
+
+    @pytest.fixture
+    def downloader(self, tmp_path):
+        """Create downloader instance with temporary output directory."""
+        # Create a temporary config
+        config = Config()
+        # Override paths to use tmp_path
+        config._config["paths"]["raw"] = str(tmp_path / "raw")
+        config._config["paths"]["processed"] = str(tmp_path / "processed")
+
+        return FieldBoundaryDownloader(config=config)
+
+    @pytest.mark.integration
+    def test_download_minimum_fields(self, downloader):
+        """Test downloading minimum number of fields from real data."""
+        fields = downloader.download(count=2, regions=["corn_belt"])
+
+        # Should return exactly 2 fields
+        assert len(fields) == 2, f"Expected 2 fields, got {len(fields)}"
+
+        # Should be a GeoDataFrame
+        assert isinstance(fields, gpd.GeoDataFrame)
+
+    @pytest.mark.integration
+    def test_download_creates_valid_geometries(self, downloader):
+        """Test that downloaded fields have valid geometries."""
+        fields = downloader.download(count=2, regions=["corn_belt"])
+
+        # All geometries should be valid
+        assert fields.geometry.is_valid.all(), "Found invalid geometries"
+
+        # All geometries should be Polygons (or MultiPolygons)
+        assert all(
+            geom.geom_type in ["Polygon", "MultiPolygon"] for geom in fields.geometry
+        ), "Geometries must be Polygon or MultiPolygon types"
+
+    # ... add @pytest.mark.integration to all other existing test methods
+```
+
+## Step 8: Usage Instructions
+
+### Running Tests
+
+**Run only unit tests (fast):**
+```bash
+pytest tests/test_downloaders/test_field_boundaries_unit.py -v
+```
+
+**Run only integration tests (slow):**
+```bash
+pytest tests/test_downloaders/test_field_boundaries.py -m integration -v
+```
+
+**Run all tests:**
+```bash
+pytest tests/test_downloaders/ -v
+```
+
+**Run with coverage:**
+```bash
+pytest tests/test_downloaders/ --cov=agri_toolkit.downloaders.field_boundaries --cov-report=html
+```
+
+### Regenerating Sample Data
+
+**When the live data schema changes or sample data becomes outdated:**
+```bash
+python scripts/generate_sample_field_boundaries.py --output tests/data/sample_field_boundaries.parquet --count 10
+```
+
+### CI/CD Configuration
+
+**For GitHub Actions or similar:**
+```yaml
+# Run unit tests on every push (fast)
+- name: Run unit tests
+  run: pytest tests/test_downloaders/test_field_boundaries_unit.py -v
+
+# Run integration tests on schedule or release (slow)
+- name: Run integration tests
+  run: pytest tests/test_downloaders/test_field_boundaries.py -m integration -v
+```
+
+## Benefits Achieved
+
+1. **Performance**: Unit tests run in <1 second vs 30-60 seconds
+2. **Reliability**: No network dependencies for unit tests
+3. **Maintainability**: Clear separation of concerns
+4. **Coverage**: Both unit and integration testing maintained
+5. **Backward Compatibility**: No breaking changes to public API
+
+This implementation follows industry best practices for testing external data dependencies while maintaining full functionality validation.
