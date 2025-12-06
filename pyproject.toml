@@ -98,6 +98,7 @@ markers = [
     "unit: Unit tests using local fixtures",
     "integration: Integration tests hitting live endpoints",
     "slow: Tests that take longer than 5 seconds",
+    "persistent: Tests that generate persistent data for CI/CD artifacts",
 ]
 
 [tool.mypy]
