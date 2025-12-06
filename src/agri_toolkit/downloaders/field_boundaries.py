@@ -268,7 +268,7 @@ class FieldBoundaryDownloader(BaseDownloader):
             # Build state filter for SQL
             state_filter = ", ".join(["'%s'" % fips for fips in state_fips])
 
-            # Build crop filter for SQL  
+            # Build crop filter for SQL
             crop_filter = ", ".join(["'%s'" % self.CROP_TYPES[c] for c in crops])
 
             # Use actual parquet filename from Source Cooperative
