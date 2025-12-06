@@ -224,7 +224,7 @@ class FieldBoundaryDownloader(BaseDownloader):
         self,
         count: int,
         regions: List[str],
-        crops: List[str],
+        crops: List[str],  # noqa: ARG002
     ) -> gpd.GeoDataFrame:
         """Query USDA CSB data from Source Cooperative using DuckDB.
 
@@ -258,28 +258,26 @@ class FieldBoundaryDownloader(BaseDownloader):
             # Build state filter for SQL
             state_filter = ", ".join(["'%s'" % fips for fips in state_fips])
 
-            # Build crop filter for SQL - collect all CDL codes for requested crops
+            # Build crop codes list for debug logging
             crop_codes = []
             for crop in crops:
                 crop_codes.extend(self.CROP_TYPES[crop])
-            crop_filter = ", ".join(["'%s'" % code for code in crop_codes])
+            self.logger.debug("Requested crop codes (CDL): %s", crop_codes)
 
             # Use actual parquet filename from Source Cooperative
             # Filename is us_usda_cropland.parquet (verified at source.coop)
             parquet_url = self.SOURCE_COOP_BASE_URL
 
-            # Build DuckDB query with filters
-            # DuckDB pushes down these filters for efficient remote querying
+            # Build DuckDB query WITHOUT crop filter (temporarily removed for debugging)
+            # DuckDB pushes down filters for efficient remote querying
             # Note: fiboa schema has TWO crop code columns:
-            #   - 'crop:code' - 2023 crop type (single CDL code) - use this for filtering!
+            #   - 'crop:code' - 2023 crop type (single CDL code)
             #   - 'crop:code_list' - historical crop codes (8 years, comma-separated)
             # Also includes:
             #   - 'administrative_area_level_2' for state FIPS codes
             #   - 'crop:name' for crop name
             #   - 'id' for unique field identifier
             # Column names with special chars (colons) need double quotes in DuckDB
-
-            # DEBUG: Temporarily remove crop filter to see what data exists
             query = f"""
             SELECT
                 id as field_id,
@@ -308,13 +306,12 @@ class FieldBoundaryDownloader(BaseDownloader):
 
             self.logger.info("Retrieved %d fields from Source Cooperative", len(result_df))
 
-            # DEBUG: Log sample crop codes to see actual format
+            # DEBUG: Log actual crop_code values/types
             if len(result_df) > 0:
                 self.logger.info("Sample crop codes from data:")
-                for idx, row in result_df.head(5).iterrows():
-                    self.logger.info(
-                        f"  crop_code={row['crop_code']} (type={type(row['crop_code']).__name__}), crop_name={row['crop_name']}"
-                    )
+                sample_codes = result_df["crop_code"].head(5).tolist()
+                for i, code in enumerate(sample_codes):
+                    self.logger.info("  Row %d: crop_code=%s (type=%s)", i, code, type(code).__name__)
 
             # Convert to GeoDataFrame
             # DuckDB spatial extension returns geometry as WKB binary
