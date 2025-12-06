@@ -1,69 +1,72 @@
 #!/usr/bin/env python3
 """Generate sample field boundaries data for testing.
 
-This script downloads a small sample of field boundaries from the live
-Source Cooperative endpoint and saves it as a local Parquet file for
-use in unit tests.
+This script generates synthetic field boundaries and saves them as a local
+Parquet file for use in unit tests.
 """
 
 import argparse
 from pathlib import Path
 
 import geopandas as gpd
+from shapely.geometry import Polygon
 
-from agri_toolkit.downloaders.field_boundaries import FieldBoundaryDownloader
 
-
-def generate_sample_data(output_path: Path, count: int = 10) -> None:
+def generate_sample_data(output_path: Path, count: int = 5) -> None:
     """Generate sample field boundaries data.
 
     Args:
         output_path: Path to save the sample Parquet file.
-        count: Number of fields to sample (default: 10).
+        count: Number of fields to sample (default: 5).
     """
-    print(f"Generating sample data with {count} fields...")
+    print(f"Generating synthetic data with {count} fields...")
 
-    # Create temporary downloader to get real data
-    downloader = FieldBoundaryDownloader()
+    # Synthetic data generation parameters
+    start_lon = -93.0
+    start_lat = 42.0
+    size = 0.003  # degrees, approx 330m
+    offset = 0.01  # degrees
 
-    # Download small sample from corn belt
-    fields_gdf = downloader.download(count=count, regions=["corn_belt"], crops=["corn", "soybeans"])
+    data = []
+    for i in range(count):
+        # Calculate coordinates for this field
+        lon = start_lon + (i * offset)
+        lat = start_lat + (i * offset)
 
-    print(f"Downloaded {len(fields_gdf)} fields")
+        # Create square polygon
+        # (lon, lat), (lon+size, lat), (lon+size, lat+size), (lon, lat+size), (lon, lat)
+        poly = Polygon(
+            [(lon, lat), (lon + size, lat), (lon + size, lat + size), (lon, lat + size), (lon, lat)]
+        )
 
-    # Convert to fiboa format for storage
-    # The original data has fiboa column names, so we need to preserve those
-    sample_data = fields_gdf.copy()
+        # Alternate crops
+        is_corn = i % 2 == 0
+        crop_code = "1" if is_corn else "5"
+        crop_name = "Corn" if is_corn else "Soybeans"
 
-    # Rename columns to match fiboa schema
-    sample_data = sample_data.rename(
-        columns={
-            "field_id": "id",
-            "crop_code": "crop:code",
-            "crop_name": "crop:name",
-            "crop_code_list": "crop:code_list",
-        }
-    )
+        # Use Illinois FIPS (17) prefix for ID to match corn_belt region
+        data.append(
+            {
+                "id": f"17{i+1:05d}",
+                "crop:code": crop_code,
+                "crop:name": crop_name,
+                "crop:code_list": "USDA_CDL",
+                "administrative_area_level_2": "Story",
+                "geometry": poly,
+            }
+        )
 
-    # Select only fiboa columns
-    fiboa_columns = [
-        "id",
-        "crop:code",
-        "crop:name",
-        "crop:code_list",
-        "administrative_area_level_2",  # County name
-        "geometry",
-    ]
+    # Create GeoDataFrame
+    gdf = gpd.GeoDataFrame(data, crs="EPSG:4326")
 
-    # Ensure we have the county column (use state_fips as placeholder)
-    if "administrative_area_level_2" not in sample_data.columns:
-        sample_data["administrative_area_level_2"] = sample_data["state_fips"]
-
-    sample_data = sample_data[fiboa_columns]
+    # Calculate area in acres
+    # Project to equal area projection for accurate area calculation
+    # EPSG:5070 (NAD83 / Conus Albers) is good for US
+    gdf_projected = gdf.to_crs("EPSG:5070")
+    gdf["area_acres"] = gdf_projected.area / 4046.86  # Convert sq meters to acres
 
     # Save as Parquet
-    # Use geopandas to_parquet to ensure GeoParquet metadata is written
-    sample_data.to_parquet(output_path, index=False)
+    gdf.to_parquet(output_path, index=False)
     print(f"Sample data saved to: {output_path}")
 
     # Verify the file
@@ -80,10 +83,19 @@ def verify_sample_data(parquet_path: Path) -> None:
     print(f"Sample data contains {len(df)} fields")
     print(f"Columns: {list(df.columns)}")
     print(f"CRS: {df.crs}")
-    print(f"Sample crop codes: {df['crop:code'].unique()[:5]}")
+    print(f"Sample crop codes: {df['crop:code'].unique()}")
+    print(f"Sample areas (acres): {df['area_acres'].tolist()}")
 
     # Verify required columns
-    required_columns = ["id", "crop:code", "crop:name", "crop:code_list", "geometry"]
+    required_columns = [
+        "id",
+        "crop:code",
+        "crop:name",
+        "crop:code_list",
+        "administrative_area_level_2",
+        "geometry",
+        "area_acres",
+    ]
     missing_columns = [col for col in required_columns if col not in df.columns]
 
     if missing_columns:
@@ -101,7 +113,7 @@ def main():
         default=Path("tests/data/sample_field_boundaries.parquet"),
         help="Output path for sample Parquet file",
     )
-    parser.add_argument("--count", type=int, default=10, help="Number of fields to sample")
+    parser.add_argument("--count", type=int, default=5, help="Number of fields to sample")
 
     args = parser.parse_args()
 
